@@ -423,8 +423,6 @@ Vertical path
 ===================================================== */
 
 .token {
-    pointer-events: auto;
-    touch-action: manipulation;
     position: absolute;
     width: 30px;
     height: 34px;
@@ -866,7 +864,7 @@ html,body{width:100%;min-width:0;overflow-x:hidden;}
     <div id="lobbyPlayers"></div>
     <h3>Choose your color</h3>
     <div id="colorChoices" class="colorChoices"></div>
-    <button id="startOnlineBtn" class="wideBtn" onclick="startOnlineGame()" disabled>Start Game</button>
+    <button id="startOnlineBtn" class="wideBtn" onclick="startOnlineGame()" disabled style="display:none">Start Game</button>
     <button class="backButton" onclick="leaveRoom()">Leave Room</button>
   </div>
 </div>
@@ -1685,22 +1683,19 @@ function renderTokens() {
                               !item.player.isComputer &&
                               !botThinking &&
                               !autoMovePending &&
-                              !rolling &&
                               !awaitingRoll &&
-                              (moveChoiceOpen || online) &&
+                              moveChoiceOpen &&
                               !(window.computerMode && players[currentPlayer] && players[currentPlayer].isComputer);
 
             if (humanTurn && canMove(item.player, item.position, item.tokenIndex)) {
                 token.classList.add("movable");
             }
 
-            const activateToken = function(event) {
-                if (event) event.stopPropagation();
+            token.onclick = function(event) {
+                event.stopPropagation();
                 if (!humanTurn) return;
                 moveToken(item.playerIndex, item.tokenIndex);
             };
-            token.onclick = activateToken;
-            token.onpointerup = activateToken;
 
             board.appendChild(token);
         });
@@ -2219,7 +2214,10 @@ function renderLobby(r){
   renderColors(r);
   const me=r.players?.[uid];
   onlineColor=me?.color||null;
-  document.getElementById('startOnlineBtn').disabled=!(r.hostId===uid&&alive.length>=2&&onlineColor);
+  const startBtn=document.getElementById('startOnlineBtn');
+  const isHost=(r.hostId===uid);
+  startBtn.style.display=isHost?'block':'none';
+  startBtn.disabled=!(isHost&&alive.length>=2&&onlineColor);
 }
 
 function renderColors(r=null){
@@ -2349,7 +2347,7 @@ window.rollDice=async()=>{
     awaitingRoll=false;
     moveChoiceOpen=true;
     setDice(diceValue);
-    const rolledForPass=diceValue; setTimeout(()=>autoPass(rolledForPass),700);
+    setTimeout(()=>autoPass(diceValue),500);
   }catch(e){
     console.error(e);
     alert('Online dice error: '+e.message);
@@ -2377,7 +2375,7 @@ async function autoPass(v){
 window.moveToken=async(playerIndex,tokenIndex)=>{
   if(window.computerMode){originalMoveToken(playerIndex,tokenIndex);return;}
   if(!online||!onlineRoom)return;
-  if(rolling)return;
+  if(rolling||awaitingRoll||!moveChoiceOpen)return;
   if(Number(playerIndex)!==Number(currentPlayer))return;
   try{
     const gameRef=ref(db,'rooms/'+onlineRoom+'/game');
@@ -2482,24 +2480,17 @@ async function createVoicePeer(remoteUid){
   if(!voiceStream||!onlineRoom||!uid||!remoteUid)return;
   const remote=players.find(p=>p.uid===remoteUid);
   if(!remote||remote.voiceEnabled!==true)return;
+  const existing=voicePeers.get(remoteUid);
+  if(existing?.pc)return existing.pc;
   const initiator=String(uid)<String(remoteUid);
   const signal=voiceSignalRef(remoteUid);
   if(!signal)return;
   const signalRef=signal.ref, signalPath=signal.path;
-  const existing=voicePeers.get(remoteUid);
-  if(existing?.pc){
-    if(existing.signalPath===signalPath)return existing.pc;
-    try{existing.unsubs?.forEach(fn=>fn&&fn())}catch(_){}
-    try{existing.pc.close()}catch(_){}
-    const oldAudio=document.getElementById('voiceAudio_'+remoteUid);
-    if(oldAudio)oldAudio.remove();
-    voicePeers.delete(remoteUid);
-  }
   const pc=new RTCPeerConnection({iceServers:[
     {urls:'stun:stun.l.google.com:19302'},
     {urls:'stun:stun1.l.google.com:19302'}
   ]});
-  const entry={pc,remoteUid,queue:[],seen:new Set(),signalPath};
+  const entry={pc,remoteUid,queue:[],seen:new Set()};
   voicePeers.set(remoteUid,entry);
   voiceStream.getTracks().forEach(t=>pc.addTrack(t,voiceStream));
   pc.ontrack=e=>{if(e.streams&&e.streams[0])addRemoteAudio(remoteUid,e.streams[0])};
@@ -2509,11 +2500,7 @@ async function createVoicePeer(remoteUid){
     else if(pc.connectionState==='connecting')setVoiceStatus('Connecting voice…');
     else if(pc.connectionState==='failed'){
       setVoiceStatus('Voice connection failed — retrying…');
-      setTimeout(()=>{ if(voiceEnabled && voiceBoundRoom===onlineRoom) connectVoicePeers(); },300);
-    }
-    else if(pc.connectionState==='disconnected'){
-      setVoiceStatus('Voice disconnected — reconnecting…');
-      setTimeout(()=>{ if(voiceEnabled && voiceBoundRoom===onlineRoom) connectVoicePeers(); },500);
+      try{pc.restartIce()}catch(_){ }
     }
   };
   pc.onicecandidate=async e=>{
