@@ -829,6 +829,11 @@ html,body{width:100%;min-width:0;overflow-x:hidden;}
   .turn{font-size:11px;padding:6px 8px;}
 }
 
+
+/* Exact home-hole token centering */
+.homeInner .tokenHome{position:relative;display:flex;align-items:center;justify-content:center;overflow:visible;}
+.homeInner .token{position:absolute!important;left:50%!important;top:50%!important;transform:translate(-50%,-50%)!important;margin:0!important;}
+.homeInner .token:hover,.homeInner .token.movable{transform:translate(-50%,-50%) scale(1.08)!important;}
 </style>
 </head>
 
