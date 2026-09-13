@@ -2128,7 +2128,7 @@ function backToMenu() {
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
-import { getDatabase, ref, get, set, update, onValue, onDisconnect, runTransaction } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js";
+import { getDatabase, ref, get, set, update, onValue, onDisconnect, runTransaction, push } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js";
 
 const firebaseConfig={
  apiKey:"AIzaSyAjgffLiCYZpabBSPvh6ihBOmIfctWIKUA",
@@ -2286,6 +2286,8 @@ window.rollDice=async()=>{
   if(window.computerMode){originalRollDice();return;}
   if(!online||!onlineRoom){originalRollDice();return;}
   if(rolling)return;
+  const dice=document.getElementById('dice');
+  if(dice)dice.classList.add('rolling');
   rolling=true;
   try{
     const gameRef=ref(db,'rooms/'+onlineRoom+'/game');
@@ -2293,13 +2295,16 @@ window.rollDice=async()=>{
       if(!g||g.phase!=='roll'||!g.players?.[g.currentPlayer]||g.players[g.currentPlayer].uid!==uid)return;
       return {...g,diceValue:Math.floor(Math.random()*6)+1,phase:'move'};
     });
-    if(!tx.committed){rolling=false;return;}
+    if(!tx.committed){return;}
     const g=tx.snapshot.val(),v=Number(g.diceValue);
     diceValue=v;
     setDice(v);
     setTimeout(()=>autoPass(v),450);
-  }catch(e){console.error(e)}finally{
-    setTimeout(()=>{rolling=false},450);
+  }catch(e){
+    console.error(e);
+    alert('Online dice error: '+e.message);
+  }finally{
+    setTimeout(()=>{rolling=false;if(dice)dice.classList.remove('rolling');},450);
   }
 };
 
@@ -2421,27 +2426,29 @@ async function createVoicePeer(remoteUid,initiator){
   const unsubs=[];
   pc.onicecandidate=async e=>{
     if(e.candidate){
-      const key=ref(db,'rooms/'+onlineRoom+'/voice/'+pair+'/candidates/'+uid).key;
-      await set(ref(db,'rooms/'+onlineRoom+'/voice/'+pair+'/candidates/'+uid+'/'+key),e.candidate.toJSON()).catch(()=>{});
+      const candidateRef=push(ref(db,'rooms/'+onlineRoom+'/voice/'+pair+'/candidates/'+uid));
+      await set(candidateRef,e.candidate.toJSON()).catch(()=>{});
     }
   };
   if(initiator){
     const offer=await pc.createOffer();
     await pc.setLocalDescription(offer);
     await set(offerRef,{type:offer.type,sdp:offer.sdp,from:uid});
-  }else{
-    const snap=await get(offerRef);
+  }
+  const offerListener=onValue(offerRef,async snap=>{
+    if(initiator)return;
     const offer=snap.val();
-    if(offer && !pc.currentRemoteDescription){
+    if(!offer || offer.from===uid || pc.currentRemoteDescription)return;
+    try{
       await pc.setRemoteDescription(offer);
       const answer=await pc.createAnswer();
       await pc.setLocalDescription(answer);
       await set(answerRef,{type:answer.type,sdp:answer.sdp,from:uid});
-    }
-  }
+    }catch(e){console.warn('voice offer',e)}
+  });
   const answerListener=onValue(answerRef,async snap=>{
     const answer=snap.val();
-    if(!answer || answer.from===uid || pc.currentRemoteDescription)return;
+    if(!initiator || !answer || answer.from===uid || pc.currentRemoteDescription)return;
     if(pc.signalingState==='have-local-offer'){
       try{await pc.setRemoteDescription(answer)}catch(e){console.warn('voice answer',e)}
     }
@@ -2454,7 +2461,7 @@ async function createVoicePeer(remoteUid,initiator){
       try{await pc.addIceCandidate(new RTCIceCandidate(c))}catch(e){console.warn('voice candidate',e)}
     }
   });
-  unsubs.push(answerListener,candidateListener);
+  unsubs.push(offerListener,answerListener,candidateListener);
   entry.unsubs=unsubs;
   return pc;
 }
