@@ -839,9 +839,6 @@ html,body{width:100%;min-width:0;overflow-x:hidden;}
 
 
 /* Exact home-hole token centering */
-.homeInner .tokenHome{position:relative;display:flex;align-items:center;justify-content:center;overflow:visible;}
-.homeInner .token{position:absolute!important;left:50%!important;top:50%!important;transform:translate(-50%,-50%)!important;margin:0!important;}
-.homeInner .token:hover,.homeInner .token.movable{transform:translate(-50%,-50%) scale(1.08)!important;}
 </style>
 </head>
 
@@ -1680,20 +1677,34 @@ function tokenPosition(color, position, tokenIndex) {
 ===================================================== */
 
 function renderTokens() {
-    document.querySelectorAll(".token").forEach(t => t.remove());
+    // Remove only the movable game tokens. The four printed home holes stay.
+    document.querySelectorAll('#board > .token').forEach(t => t.remove());
 
-    const board = document.getElementById("board");
-    const items = [];
+    const board = document.getElementById('board');
+    if (!board) return;
+
+    // The reference board has four home holes per colour. These coordinates
+    // are the CENTRES of the printed holes in the 15x15 board image.
+    const fallbackPlayers = [
+        {color:'red',    name:'Player 1', tokens:[-1,-1,-1,-1], isComputer:false},
+        {color:'green',  name:'Player 2', tokens:[-1,-1,-1,-1], isComputer:false},
+        {color:'blue',   name:'Player 3', tokens:[-1,-1,-1,-1], isComputer:false},
+        {color:'yellow', name:'Player 4', tokens:[-1,-1,-1,-1], isComputer:false}
+    ];
+
+    // If the synced game has not supplied its player array yet, still draw
+    // the 16 starting tokens. They are replaced immediately by real players
+    // when Firebase/local game state arrives.
+    const sourcePlayers = Array.isArray(players) && players.length ? players : fallbackPlayers;
+
     const groups = {};
-
-    players.forEach((player, playerIndex) => {
-        player.tokens.forEach((position, tokenIndex) => {
-            const pos = tokenPosition(player.color, position, tokenIndex);
-            const key = pos.left.toFixed(3) + "," + pos.top.toFixed(3);
+    sourcePlayers.forEach((player, playerIndex) => {
+        const tokenList = Array.isArray(player.tokens) ? player.tokens : [-1,-1,-1,-1];
+        tokenList.slice(0,4).forEach((position, tokenIndex) => {
+            const pos = tokenPosition(player.color, Number(position), tokenIndex);
+            const key = pos.left.toFixed(3) + ',' + pos.top.toFixed(3);
             if (!groups[key]) groups[key] = [];
-            const item = {player, playerIndex, position, tokenIndex, pos, key};
-            groups[key].push(item);
-            items.push(item);
+            groups[key].push({player,playerIndex,position:Number(position),tokenIndex,pos});
         });
     });
 
@@ -1705,28 +1716,39 @@ function renderTokens() {
                         [[0,0]];
 
         group.forEach((item, stackIndex) => {
-            const token = document.createElement("div");
-            token.className = "token " + item.player.color;
-            if (item.position === -1) token.classList.add("home-token");
+            const token = document.createElement('div');
+            token.className = 'token ' + item.player.color;
+            if (item.position === -1) token.classList.add('home-token');
             token.dataset.player = item.playerIndex;
             token.dataset.token = item.tokenIndex;
 
             const off = offsets[stackIndex] || [0,0];
-            token.style.left = (item.pos.left + off[0]) + "%";
-            token.style.top = (item.pos.top + off[1]) + "%";
+            // !important guarantees that no board layer/CSS rule can move the
+            // token away from the calculated hole centre.
+            token.style.setProperty('left', (item.pos.left + off[0]) + '%', 'important');
+            token.style.setProperty('top', (item.pos.top + off[1]) + '%', 'important');
+            token.style.setProperty('transform', 'translate3d(-50%,-50%,0)', 'important');
+            token.style.setProperty('display', 'block', 'important');
+            token.style.setProperty('visibility', 'visible', 'important');
+            token.style.setProperty('opacity', '1', 'important');
+            token.style.setProperty('z-index', '500', 'important');
             token.style.pointerEvents = 'auto';
             token.style.touchAction = 'manipulation';
 
-            if (count === 2) token.classList.add("stack2");
-            if (count === 3) token.classList.add("stack3");
-            if (count >= 4) token.classList.add("stack4");
+            if (count === 2) token.classList.add('stack2');
+            if (count === 3) token.classList.add('stack3');
+            if (count >= 4) token.classList.add('stack4');
 
+            // Fallback tokens are display-only until the real game state is
+            // available. Real players retain the normal click/move rules.
+            const isFallback = sourcePlayers === fallbackPlayers;
             const onlineMovePhase = online && !window.computerMode &&
                                    players[currentPlayer]?.uid === uid &&
                                    !awaitingRoll &&
                                    Number.isInteger(Number(diceValue)) && Number(diceValue)>=1 && Number(diceValue)<=6;
             const localMovePhase = !online && !awaitingRoll && moveChoiceOpen;
-            const humanTurn = item.playerIndex === currentPlayer &&
+            const humanTurn = !isFallback &&
+                              item.playerIndex === currentPlayer &&
                               !item.player.isComputer &&
                               !botThinking &&
                               !autoMovePending &&
@@ -1734,7 +1756,7 @@ function renderTokens() {
                               !(window.computerMode && players[currentPlayer] && players[currentPlayer].isComputer);
 
             if (humanTurn && canMove(item.player, item.position, item.tokenIndex)) {
-                token.classList.add("movable");
+                token.classList.add('movable');
             }
 
             token.onclick = function(event) {
@@ -1747,7 +1769,6 @@ function renderTokens() {
         });
     });
 }
-
 
 /* =====================================================
    SMOOTH COIN MOVEMENT
