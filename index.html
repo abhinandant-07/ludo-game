@@ -2269,9 +2269,12 @@ function startSyncedGame(r){
     players=x.players||[];
     currentPlayer=Number(x.currentPlayer||0);
     refreshVoiceForPlayers();
+    updateVoicePlayerList();
     diceValue=Number(x.diceValue||1);
     const mine=players[currentPlayer]?.uid===uid;
     awaitingRoll=!mine || x.phase!=='move';
+    moveChoiceOpen=mine && x.phase==='move';
+    if(x.phase!=='move') moveChoiceOpen=false;
     setDice(diceValue);
     updateTurn();
     renderTokens();
@@ -2284,27 +2287,36 @@ function startSyncedGame(r){
 
 window.rollDice=async()=>{
   if(window.computerMode){originalRollDice();return;}
-  if(!online||!onlineRoom){originalRollDice();return;}
+  if(!online||!onlineRoom)return;
   if(rolling)return;
-  const dice=document.getElementById('dice');
-  if(dice)dice.classList.add('rolling');
-  rolling=true;
+  // NEVER animate or change the dice unless this device owns the current turn.
   try{
-    const gameRef=ref(db,'rooms/'+onlineRoom+'/game');
-    const tx=await runTransaction(gameRef,g=>{
-      if(!g||g.phase!=='roll'||!g.players?.[g.currentPlayer]||g.players[g.currentPlayer].uid!==uid)return;
-      return {...g,diceValue:Math.floor(Math.random()*6)+1,phase:'move'};
+    const snap=await get(ref(db,'rooms/'+onlineRoom+'/game'));
+    const g=snap.val();
+    if(!g || g.phase!=='roll')return;
+    const cp=Number(g.currentPlayer);
+    if(!g.players?.[cp] || g.players[cp].uid!==uid)return;
+    const dice=document.getElementById('dice');
+    rolling=true;
+    if(dice)dice.classList.add('rolling');
+    const tx=await runTransaction(ref(db,'rooms/'+onlineRoom+'/game'),cur=>{
+      if(!cur || cur.phase!=='roll')return;
+      const i=Number(cur.currentPlayer);
+      if(!cur.players?.[i] || cur.players[i].uid!==uid)return;
+      return {...cur,diceValue:Math.floor(Math.random()*6)+1,phase:'move'};
     });
-    if(!tx.committed){return;}
-    const g=tx.snapshot.val(),v=Number(g.diceValue);
-    diceValue=v;
-    setDice(v);
-    setTimeout(()=>autoPass(v),450);
+    if(!tx.committed)return;
+    const result=tx.snapshot.val();
+    diceValue=Number(result.diceValue);
+    awaitingRoll=false;
+    moveChoiceOpen=true;
+    setDice(diceValue);
+    setTimeout(()=>autoPass(diceValue),500);
   }catch(e){
     console.error(e);
     alert('Online dice error: '+e.message);
   }finally{
-    setTimeout(()=>{rolling=false;if(dice)dice.classList.remove('rolling');},450);
+    setTimeout(()=>{rolling=false;const d=document.getElementById('dice');if(d)d.classList.remove('rolling');renderTokens();},450);
   }
 };
 
@@ -2366,6 +2378,9 @@ const voiceUnsubs=new Map();
 let voiceStream=null;
 let voiceEnabled=false;
 let voiceBoundRoom=null;
+let voiceSessionId=null;
+let voiceMuted=false;
+let voiceStatusUnsub=null;
 
 function voicePair(a,b){return [a,b].sort().join('_')}
 function voicePath(pair){return ref(db,'rooms/'+onlineRoom+'/voice/'+pair)}
@@ -2378,7 +2393,16 @@ function setVoiceStatus(text){
 }
 function ensureVoicePanel(){
   const panel=document.getElementById('voicePanel');
-  if(panel)panel.style.display=(online && onlineRoom)?'block':'none';
+  if(panel){
+    panel.style.display=(online && onlineRoom)?'block':'none';
+    if(!document.getElementById('voicePlayerList')){
+      const list=document.createElement('div');
+      list.id='voicePlayerList';
+      list.className='voiceStatus';
+      panel.appendChild(list);
+    }
+    updateVoicePlayerList();
+  }
 }
 
 function addRemoteAudio(peerUid,stream){
@@ -2412,6 +2436,8 @@ async function createVoicePeer(remoteUid,initiator){
   voiceStream.getTracks().forEach(t=>pc.addTrack(t,voiceStream));
   pc.ontrack=e=>addRemoteAudio(remoteUid,e.streams[0]);
   pc.onconnectionstatechange=()=>{
+    if(pc.connectionState==='connected')setVoiceStatus('Voice connected');
+    else if(pc.connectionState==='connecting')setVoiceStatus('Connecting voice…');
     if(['failed','closed','disconnected'].includes(pc.connectionState)){
       if(pc.connectionState==='failed'){
         try{pc.restartIce()}catch(_){ }
@@ -2477,6 +2503,28 @@ async function connectVoicePeers(){
   setVoiceStatus('Voice enabled • '+(remotes.length?'Connected/connecting':'Waiting for players'));
 }
 
+function setLocalVoiceState(enabled,muted){
+  if(!onlineRoom||!uid)return;
+  return update(ref(db,'rooms/'+onlineRoom+'/players/'+uid),{voiceEnabled:!!enabled,muted:!!muted});
+}
+function updateVoicePlayerList(){
+  const panel=document.getElementById('voicePlayerList');
+  if(!panel)return;
+  panel.innerHTML=(players||[]).map((p,i)=>{
+    const isMe=p.uid===uid;
+    const enabled=p.voiceEnabled===true;
+    const muted=p.muted===true;
+    return '<div style=\"display:flex;justify-content:space-between;align-items:center;padding:5px 0;gap:8px\"><span>'+String(p.name||('Player '+(i+1))).replace(/[<>&\"']/g,'')+'</span><span>'+ (enabled ? (muted?'🔇 Muted':'🎤 Unmuted') : '🎤 Off') + (isMe&&enabled?' <button onclick=\"toggleMute()\" style=\"border:0;border-radius:8px;padding:3px 7px;cursor:pointer\">'+(muted?'Unmute':'Mute')+'</button>':'')+'</span></div>';
+  }).join('');
+}
+window.toggleMute=async()=>{
+  if(!voiceEnabled||!voiceStream)return;
+  voiceMuted=!voiceMuted;
+  voiceStream.getAudioTracks().forEach(t=>t.enabled=!voiceMuted);
+  await setLocalVoiceState(true,voiceMuted);
+  updateVoicePlayerList();
+};
+
 function cleanupVoice(){
   for(const [remote,entry] of voicePeers){
     try{entry.unsubs?.forEach(fn=>fn&&fn())}catch(_){ }
@@ -2485,6 +2533,9 @@ function cleanupVoice(){
     if(audio)audio.remove();
   }
   voicePeers.clear();
+  if(voiceStatusUnsub){try{voiceStatusUnsub()}catch(_){} voiceStatusUnsub=null;}
+  if(onlineRoom&&uid){setLocalVoiceState(false,false).catch(()=>{});}
+  voiceMuted=false;
   if(voiceStream){voiceStream.getTracks().forEach(t=>t.stop());voiceStream=null;}
   voiceEnabled=false;
   voiceBoundRoom=null;
@@ -2501,7 +2552,10 @@ window.toggleVoice=async()=>{
   try{
     voiceStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
     voiceEnabled=true;
+    voiceMuted=false;
     voiceBoundRoom=onlineRoom;
+    voiceSessionId=Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);
+    await setLocalVoiceState(true,false);
     const btn=document.getElementById('voiceBtn');
     if(btn){btn.textContent='🔇 Disable Voice';btn.classList.add('off');}
     setVoiceStatus('Starting voice chat…');
