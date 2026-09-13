@@ -2142,7 +2142,7 @@ const firebaseConfig={
 };
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getDatabase(app);
 window.computerMode=false;
-let uid=null,online=false,onlineRoom=null,onlineMax=2,onlineColor=null,roomUnsub=null,gameUnsub=null,originalStartGame=window.startGame,originalRollDice=window.rollDice,originalMoveToken=window.moveToken;
+let uid=null,online=false,onlineRoom=null,onlineMax=2,onlineColor=null,roomUnsub=null,gameUnsub=null,roomVoiceUnsub=null,roomPlayerStates={},originalStartGame=window.startGame,originalRollDice=window.rollDice,originalMoveToken=window.moveToken;
 let authReady=new Promise(resolve=>onAuthStateChanged(auth,user=>{uid=user?user.uid:null;resolve(uid);}));
 
 function show(id){document.querySelectorAll('.modalScreen').forEach(x=>x.style.display='none');document.getElementById(id).style.display='flex'}
@@ -2239,10 +2239,30 @@ window.startOnlineGame=async()=>{
     if(!r||r.hostId!==uid)return;
     const ps=Object.values(r.players||{}).filter(p=>p.connected!==false&&p.color);
     if(ps.length<2){alert('At least 2 connected players with colors are required.');return;}
-    const gamePlayers=ps.map(p=>({uid:p.uid,name:p.name,color:p.color,tokens:[-1,-1,-1,-1]}));
-    await update(roomRef(),{status:'playing',game:{players:gamePlayers,currentPlayer:0,diceValue:1,phase:'roll',winner:null}});
+    const gamePlayers=ps.map(p=>({uid:p.uid,name:p.name,color:p.color,tokens:[-1,-1,-1,-1],voiceEnabled:p.voiceEnabled===true,muted:p.muted===true,voiceSessionId:p.voiceSessionId||null}));
+    const tx=await runTransaction(roomRef(),cur=>{
+      if(!cur||cur.status!=='waiting'||cur.hostId!==uid)return;
+      const live=Object.values(cur.players||{}).filter(p=>p.connected!==false&&p.color);
+      if(live.length<2)return;
+      const gp=live.map(p=>({uid:p.uid,name:p.name,color:p.color,tokens:[-1,-1,-1,-1],voiceEnabled:p.voiceEnabled===true,muted:p.muted===true,voiceSessionId:p.voiceSessionId||null}));
+      return {...cur,status:'playing',game:{players:gp,currentPlayer:0,diceValue:1,phase:'roll',winner:null}};
+    });
+    if(!tx.committed){alert('Only the host can start the game, and at least 2 connected colored players are required.');return;}
   }catch(e){console.error(e);alert('Could not start game: '+e.message)}
 };
+
+function mergeRoomVoiceState(roomPlayers){
+  roomPlayerStates=roomPlayers||{};
+  players=(players||[]).map(p=>{
+    const rp=roomPlayerStates[p.uid]||{};
+    return {...p,
+      voiceEnabled:rp.voiceEnabled===true,
+      muted:rp.muted===true,
+      voiceSessionId:rp.voiceSessionId||null
+    };
+  });
+  updateVoicePlayerList();
+}
 
 function startSyncedGame(r){
   window.computerMode=false;
@@ -2256,6 +2276,8 @@ function startSyncedGame(r){
   if(!g)return;
   players=g.players||[];
   currentPlayer=Number(g.currentPlayer||0);
+  roomPlayerStates=r.players||{};
+  mergeRoomVoiceState(roomPlayerStates);
   ensureVoicePanel();
   diceValue=Number(g.diceValue||1);
   setDice(diceValue);
@@ -2263,21 +2285,32 @@ function startSyncedGame(r){
   updateTurn();
   renderTokens();
   if(gameUnsub) gameUnsub();
+  if(roomVoiceUnsub) roomVoiceUnsub();
+
+  /* Keep the game copy of each player's voice state synchronized with the
+     lobby/player record. This is essential because game.players contains
+     token data while room.players contains live microphone state. */
+  roomVoiceUnsub=onValue(ref(db,'rooms/'+onlineRoom+'/players'),snap=>{
+    mergeRoomVoiceState(snap.val()||{});
+    if(voiceEnabled && voiceBoundRoom===onlineRoom) connectVoicePeers();
+  });
+
   gameUnsub=onValue(ref(db,'rooms/'+onlineRoom+'/game'),s=>{
     const x=s.val();
     if(!x)return;
     players=x.players||[];
     currentPlayer=Number(x.currentPlayer||0);
-    refreshVoiceForPlayers();
-    updateVoicePlayerList();
+    mergeRoomVoiceState(roomPlayerStates);
     diceValue=Number(x.diceValue||1);
     const mine=players[currentPlayer]?.uid===uid;
-    awaitingRoll=!mine || x.phase!=='move';
-    moveChoiceOpen=mine && x.phase==='move';
-    if(x.phase!=='move') moveChoiceOpen=false;
+    const isMovePhase=x.phase==='move';
+    awaitingRoll=!mine || !isMovePhase;
+    moveChoiceOpen=mine && isMovePhase;
+    if(!isMovePhase) moveChoiceOpen=false;
     setDice(diceValue);
     updateTurn();
     renderTokens();
+    updateVoicePlayerList();
     if(x.winner){
       const winner=players.find(p=>p.uid===x.winner);
       if(winner) document.getElementById('turnText').textContent=winner.name+' Wins!';
@@ -2338,17 +2371,25 @@ async function autoPass(v){
 
 window.moveToken=async(playerIndex,tokenIndex)=>{
   if(window.computerMode){originalMoveToken(playerIndex,tokenIndex);return;}
-  if(!online||!onlineRoom){originalMoveToken(playerIndex,tokenIndex);return;}
+  if(!online||!onlineRoom)return;
+  if(rolling||awaitingRoll||!moveChoiceOpen)return;
+  if(Number(playerIndex)!==Number(currentPlayer))return;
   try{
     const gameRef=ref(db,'rooms/'+onlineRoom+'/game');
-    await runTransaction(gameRef,g=>{
+    const tx=await runTransaction(gameRef,g=>{
       if(!g||g.phase!=='move')return;
-      if(Number(g.currentPlayer)!==Number(playerIndex)||g.players?.[g.currentPlayer]?.uid!==uid)return;
+      const cp=Number(g.currentPlayer);
+      if(cp!==Number(playerIndex))return;
+      if(g.players?.[cp]?.uid!==uid)return;
       const p=g.players[playerIndex];
-      const v=Number(g.diceValue),pos0=Number(p.tokens?.[tokenIndex]);
-      if(!Number.isFinite(pos0)||pos0>=57||(pos0===-1&&v!==6)||(pos0!==-1&&(pos0+v>57)))return;
+      if(!p)return;
+      const v=Number(g.diceValue);
+      const pos0=Number(p.tokens?.[tokenIndex]);
+      if(!Number.isFinite(pos0)||pos0>=57)return;
+      if(pos0===-1 && v!==6)return;
+      if(pos0!==-1 && pos0+v>57)return;
       const pos=pos0===-1?0:pos0+v;
-      const arr=g.players.map(x=>({...x,tokens:[...x.tokens]}));
+      const arr=g.players.map(x=>({...x,tokens:[...(x.tokens||[-1,-1,-1,-1])]}));
       arr[playerIndex].tokens[tokenIndex]=pos;
       let captured=false;
       const actual=((START[p.color]||0)+pos)%52;
@@ -2357,16 +2398,26 @@ window.moveToken=async(playerIndex,tokenIndex)=>{
           if(j===playerIndex)continue;
           for(let k=0;k<4;k++){
             const q=Number(arr[j].tokens[k]);
-            if(q>=0&&q<52&&((START[arr[j].color]||0)+q)%52===actual){arr[j].tokens[k]=-1;captured=true;}
+            if(q>=0&&q<52&&((START[arr[j].color]||0)+q)%52===actual){
+              arr[j].tokens[k]=-1;
+              captured=true;
+            }
           }
         }
       }
       const won=arr[playerIndex].tokens.every(x=>Number(x)>=57);
       const extra=shouldGrantExtraTurn(v,captured,pos);
-      const nextPlayerIndex=extra?Number(g.currentPlayer):(Number(g.currentPlayer)+1)%arr.length;
-      return { ...g,players:arr,currentPlayer:nextPlayerIndex,diceValue:1,phase:'roll',winner:won?p.uid:null };
+      const nextPlayerIndex=extra?cp:(cp+1)%arr.length;
+      return {...g,players:arr,currentPlayer:nextPlayerIndex,diceValue:1,phase:'roll',winner:won?p.uid:null};
     });
-  }catch(e){console.error(e)}
+    if(tx.committed){
+      moveChoiceOpen=false;
+      awaitingRoll=true;
+    }
+  }catch(e){
+    console.error(e);
+    alert('Could not move token: '+e.message);
+  }
 };
 
 /* =====================================================
@@ -2379,10 +2430,11 @@ let voiceEnabled=false;
 let voiceBoundRoom=null;
 let voiceSessionId=null;
 let voiceMuted=false;
+let voiceChanging=false;
 
 function voicePair(a,b){return [a,b].sort().join('_')}
 function setVoiceStatus(text){const el=document.getElementById('voiceStatus');if(el)el.textContent=text}
-function activeRemotePlayers(){return (players||[]).filter(p=>p&&p.uid&&p.uid!==uid&&p.voiceEnabled===true)}
+function activeRemotePlayers(){return (players||[]).filter(p=>p&&p.uid&&p.uid!==uid&&p.voiceEnabled===true&&p.connected!==false)}
 function ensureVoicePanel(){
   const panel=document.getElementById('voicePanel');
   if(panel){
@@ -2440,6 +2492,7 @@ async function createVoicePeer(remoteUid){
   voiceStream.getTracks().forEach(t=>pc.addTrack(t,voiceStream));
   pc.ontrack=e=>{if(e.streams&&e.streams[0])addRemoteAudio(remoteUid,e.streams[0])};
   pc.onconnectionstatechange=()=>{
+    updateVoicePlayerList();
     if(pc.connectionState==='connected')setVoiceStatus('Voice connected');
     else if(pc.connectionState==='connecting')setVoiceStatus('Connecting voice…');
     else if(pc.connectionState==='failed'){
@@ -2496,10 +2549,21 @@ async function createVoicePeer(remoteUid){
 }
 
 async function connectVoicePeers(){
-  if(!voiceEnabled||!voiceStream||!onlineRoom||!uid)return;
+  if(voiceChanging||!voiceEnabled||!voiceStream||!onlineRoom||!uid)return;
   const remotes=activeRemotePlayers();
+  const wanted=new Set(remotes.map(p=>p.uid));
+  for(const [remote,entry] of voicePeers){
+    if(!wanted.has(remote)){
+      try{entry.unsubs?.forEach(fn=>fn&&fn())}catch(_){ }
+      try{entry.pc?.close()}catch(_){ }
+      const audio=document.getElementById('voiceAudio_'+remote);if(audio)audio.remove();
+      voicePeers.delete(remote);
+    }
+  }
   for(const p of remotes){try{await createVoicePeer(p.uid)}catch(e){console.warn('voice peer',e)}}
-  setVoiceStatus(remotes.length?'Voice connected/connecting':'Waiting for other players to enable voice');
+  const connected=[...voicePeers.values()].filter(e=>e.pc?.connectionState==='connected').length;
+  setVoiceStatus(remotes.length?(connected+'/'+remotes.length+' voice connection'+(remotes.length===1?'':'s')):'Waiting for other players to enable voice');
+  updateVoicePlayerList();
 }
 async function setLocalVoiceState(enabled,muted,session){
   if(!onlineRoom||!uid)return;
@@ -2512,10 +2576,20 @@ function updateVoicePlayerList(){
   const panel=document.getElementById('voicePlayerList');
   if(!panel)return;
   panel.innerHTML=(players||[]).map((p,i)=>{
-    const isMe=p.uid===uid,enabled=p.voiceEnabled===true,muted=p.muted===true;
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;gap:8px"><span>'+String(p.name||('Player '+(i+1))).replace(/[<>&"']/g,'')+'</span><span>'+ (enabled?(muted?'🔇 Muted':'🎤 Unmuted'):'🎤 Off') + (isMe&&enabled?' <button onclick="toggleMute()" style="border:0;border-radius:8px;padding:3px 7px;cursor:pointer">'+(muted?'Unmute':'Mute')+'</button>':'')+'</span></div>';
+    const isMe=p.uid===uid;
+    const enabled=p.voiceEnabled===true;
+    const muted=p.muted===true;
+    const entry=voicePeers.get(p.uid);
+    const state=entry?.pc?.connectionState;
+    let status=enabled?(muted?'🔇 Muted':'🎤 Unmuted'):'🎤 Off';
+    if(enabled && !isMe && state==='connected') status+=(muted?'':' • 🔊 Connected');
+    else if(enabled && !isMe && (state==='connecting'||state==='new')) status+=' • Connecting…';
+    else if(enabled && !isMe && state==='failed') status+=' • Connection failed';
+    const button=isMe&&enabled?' <button onclick="toggleMute()" style="border:0;border-radius:8px;padding:3px 7px;cursor:pointer">'+(muted?'Unmute':'Mute')+'</button>':'';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;gap:8px"><span>'+String(p.name||('Player '+(i+1))).replace(/[<>&"']/g,'')+'</span><span>'+status+button+'</span></div>';
   }).join('');
 }
+
 window.toggleMute=async()=>{
   if(!voiceEnabled||!voiceStream)return;
   voiceMuted=!voiceMuted;
@@ -2524,9 +2598,13 @@ window.toggleMute=async()=>{
   updateVoicePlayerList();
 };
 async function cleanupVoice(){
-  /* First publish OFF and wait for Firebase. This prevents the old OFF write from racing a new ON write. */
+  voiceChanging=true;
+  /* Mark OFF before closing peers. The changing flag prevents the room listener
+     from immediately creating a new peer during the OFF -> cleanup transition. */
   const room=onlineRoom,currentUid=uid;
-  if(room&&currentUid){try{await update(ref(db,'rooms/'+room+'/players/'+currentUid),{voiceEnabled:false,muted:false,voiceSessionId:null})}catch(_){}}
+  voiceEnabled=false;
+  voiceMuted=false;
+  if(room&&currentUid){try{await update(ref(db,'rooms/'+room+'/players/'+currentUid),{voiceEnabled:false,muted:false,voiceSessionId:null})}catch(_){} }
   for(const [remote,entry] of voicePeers){
     try{entry.unsubs?.forEach(fn=>fn&&fn())}catch(_){ }
     try{entry.pc?.close()}catch(_){ }
@@ -2534,41 +2612,57 @@ async function cleanupVoice(){
   }
   voicePeers.clear();
   if(voiceStream){voiceStream.getTracks().forEach(t=>t.stop());voiceStream=null;}
-  voiceEnabled=false;voiceMuted=false;voiceBoundRoom=null;voiceSessionId=null;
+  voiceBoundRoom=null;voiceSessionId=null;
   const btn=document.getElementById('voiceBtn');if(btn){btn.textContent='🎤 Enable Voice';btn.classList.remove('off')}
-  setVoiceStatus('Voice chat off');ensureVoicePanel();
-}
-window.toggleVoice=async()=>{
+  voiceChanging=false;
+  setVoiceStatus('Voice chat off');
+  ensureVoicePanel();
+}window.toggleVoice=async()=>{
   if(!online||!onlineRoom){alert('Voice chat is available in Online rooms only.');return;}
+  if(voiceChanging)return;
   if(voiceEnabled){await cleanupVoice();return;}
   if(!navigator.mediaDevices?.getUserMedia){alert('Your browser does not support microphone access.');return;}
+  voiceChanging=true;
   try{
-    /* Every enable gets a completely new signaling session. */
-    voiceSessionId=Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);
+    /* Every enable gets a brand-new signaling session. Old offers/candidates
+       are never reused. */
+    const room=onlineRoom;
+    const session=Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);
+    voiceSessionId=session;
     voiceStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
-    voiceEnabled=true;voiceMuted=false;voiceBoundRoom=onlineRoom;
-    await setLocalVoiceState(true,false,voiceSessionId);
+    if(room!==onlineRoom){throw new Error('The online room changed.');}
+    voiceEnabled=true;voiceMuted=false;voiceBoundRoom=room;
+    await setLocalVoiceState(true,false,session);
+    /* If this tab/browser disappears unexpectedly, mark voice OFF for the
+       other players instead of leaving a stale Unmuted status. */
+    await onDisconnect(ref(db,'rooms/'+room+'/players/'+uid)).update({voiceEnabled:false,muted:false,voiceSessionId:null});
     const btn=document.getElementById('voiceBtn');if(btn){btn.textContent='🔇 Disable Voice';btn.classList.add('off')}
     setVoiceStatus('Starting voice chat…');
+    voiceChanging=false;
     await connectVoicePeers();
   }catch(e){
     console.error(e);
     if(voiceStream){voiceStream.getTracks().forEach(t=>t.stop());voiceStream=null;}
-    voiceEnabled=false;voiceSessionId=null;
+    voiceEnabled=false;voiceMuted=false;voiceSessionId=null;
     try{await setLocalVoiceState(false,false,null)}catch(_){ }
-    alert('Microphone access was not allowed. Please allow microphone permission and try again.');
+    voiceChanging=false;
+    const btn=document.getElementById('voiceBtn');if(btn){btn.textContent='🎤 Enable Voice';btn.classList.remove('off')}
+    setVoiceStatus('Voice chat off');
+    alert('Microphone access was not allowed or voice could not start. Please allow microphone permission and try again.');
   }
 };
 function refreshVoiceForPlayers(){
   ensureVoicePanel();
   updateVoicePlayerList();
-  if(voiceEnabled&&voiceBoundRoom===onlineRoom)connectVoicePeers();
+  if(!voiceChanging&&voiceEnabled&&voiceBoundRoom===onlineRoom)connectVoicePeers();
 }
 
 window.leaveRoom=async()=>{
-  cleanupVoice();
+  await cleanupVoice();
   try{
     if(gameUnsub){gameUnsub();gameUnsub=null;}
+    if(roomVoiceUnsub){roomVoiceUnsub();roomVoiceUnsub=null;}
+    roomPlayerStates={};
     if(roomUnsub){roomUnsub();roomUnsub=null;}
     if(onlineRoom&&uid){
       await update(ref(db,'rooms/'+onlineRoom+'/players/'+uid),{connected:false});
