@@ -861,9 +861,11 @@ html,body{width:100%;min-width:0;overflow-x:hidden;}
 /* Exact home-hole token centering */
 
 /* FINAL TOKEN VISIBILITY FIX */
-#tokenLayer{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;z-index:99999!important;pointer-events:none!important;display:block!important;visibility:visible!important;opacity:1!important;}
-#tokenLayer .token{position:absolute!important;display:block!important;visibility:visible!important;opacity:1!important;z-index:100000!important;pointer-events:auto!important;}
-.token.home-token{width:5.4%!important;height:6.0%!important;min-width:30px!important;min-height:32px!important;max-width:38px!important;max-height:42px!important;}
+#board{isolation:isolate!important;}
+#tokenLayer{position:absolute!important;left:0!important;top:0!important;right:0!important;bottom:0!important;width:100%!important;height:100%!important;z-index:2147483646!important;display:block!important;visibility:visible!important;opacity:1!important;pointer-events:none!important;overflow:visible!important;isolation:isolate!important;transform:translateZ(0)!important;}
+#tokenLayer .token{position:absolute!important;display:block!important;visibility:visible!important;opacity:1!important;z-index:2147483647!important;pointer-events:auto!important;overflow:visible!important;transform:translate3d(-50%,-50%,0)!important;background-clip:border-box!important;mix-blend-mode:normal!important;}
+#tokenLayer .token.red{background:#d91f1f!important}.token.green{background:#239000!important}.token.blue{background:#0068d8!important}.token.yellow{background:#e5a600!important}.token.purple{background:#8b3dcc!important}.token.orange{background:#ed7414!important;}
+#tokenLayer .token.home-token{width:5.4%!important;height:6%!important;min-width:30px!important;min-height:32px!important;max-width:38px!important;max-height:42px!important;}
 </style>
 </head>
 
@@ -1042,30 +1044,30 @@ html,body{width:100%;min-width:0;overflow-x:hidden;}
 
                 <div class="verticalPath" id="verticalPath"></div>
 
-                <!-- Dedicated gameplay token layer. Always above the board image. -->
-                <div id="tokenLayer" aria-hidden="true">
-                  <div class="token red home-token" data-player="0" data-token="0" style="left:14%;top:14%;"></div>
-                  <div class="token red home-token" data-player="0" data-token="1" style="left:28%;top:14%;"></div>
-                  <div class="token red home-token" data-player="0" data-token="2" style="left:14%;top:28%;"></div>
-                  <div class="token red home-token" data-player="0" data-token="3" style="left:28%;top:28%;"></div>
-                  <div class="token green home-token" data-player="1" data-token="0" style="left:14%;top:72%;"></div>
-                  <div class="token green home-token" data-player="1" data-token="1" style="left:28%;top:72%;"></div>
-                  <div class="token green home-token" data-player="1" data-token="2" style="left:14%;top:86%;"></div>
-                  <div class="token green home-token" data-player="1" data-token="3" style="left:28%;top:86%;"></div>
-                  <div class="token blue home-token" data-player="2" data-token="0" style="left:72%;top:14%;"></div>
-                  <div class="token blue home-token" data-player="2" data-token="1" style="left:86%;top:14%;"></div>
-                  <div class="token blue home-token" data-player="2" data-token="2" style="left:72%;top:28%;"></div>
-                  <div class="token blue home-token" data-player="2" data-token="3" style="left:86%;top:28%;"></div>
-                  <div class="token yellow home-token" data-player="3" data-token="0" style="left:72%;top:72%;"></div>
-                  <div class="token yellow home-token" data-player="3" data-token="1" style="left:86%;top:72%;"></div>
-                  <div class="token yellow home-token" data-player="3" data-token="2" style="left:72%;top:86%;"></div>
-                  <div class="token yellow home-token" data-player="3" data-token="3" style="left:86%;top:86%;"></div>
-                </div>
-
-
                 <!-- CENTER -->
 
                 <div class="center"></div>
+
+                <!-- Dedicated gameplay token layer. Always above the board image. -->
+                <div id="tokenLayer" aria-hidden="true">
+                  <div class="token red home-token" data-player="0" data-token="0" style="left:14.2578%;top:14.4531%;"></div>
+                  <div class="token red home-token" data-player="0" data-token="1" style="left:24.4141%;top:14.4531%;"></div>
+                  <div class="token red home-token" data-player="0" data-token="2" style="left:14.2578%;top:24.8047%;"></div>
+                  <div class="token red home-token" data-player="0" data-token="3" style="left:24.4141%;top:24.8047%;"></div>
+                  <div class="token green home-token" data-player="1" data-token="0" style="left:14.2578%;top:75.3906%;"></div>
+                  <div class="token green home-token" data-player="1" data-token="1" style="left:24.4141%;top:75.3906%;"></div>
+                  <div class="token green home-token" data-player="1" data-token="2" style="left:14.2578%;top:85.5469%;"></div>
+                  <div class="token green home-token" data-player="1" data-token="3" style="left:24.4141%;top:85.5469%;"></div>
+                  <div class="token blue home-token" data-player="2" data-token="0" style="left:75%;top:14.4531%;"></div>
+                  <div class="token blue home-token" data-player="2" data-token="1" style="left:85.3516%;top:14.4531%;"></div>
+                  <div class="token blue home-token" data-player="2" data-token="2" style="left:75%;top:24.8047%;"></div>
+                  <div class="token blue home-token" data-player="2" data-token="3" style="left:85.3516%;top:24.8047%;"></div>
+                  <div class="token yellow home-token" data-player="3" data-token="0" style="left:75%;top:75.3906%;"></div>
+                  <div class="token yellow home-token" data-player="3" data-token="1" style="left:85.3516%;top:75.3906%;"></div>
+                  <div class="token yellow home-token" data-player="3" data-token="2" style="left:75%;top:85.5469%;"></div>
+                  <div class="token yellow home-token" data-player="3" data-token="3" style="left:85.3516%;top:85.5469%;"></div>
+                </div>
+
 
 
                 <!-- TOKENS WILL BE CREATED HERE -->
@@ -1572,31 +1574,31 @@ function tokenPosition(color, position, tokenIndex) {
         const homes = {
 
             red: [
-                [14.25,14.35],
-                [24.55,14.35],
-                [14.25,24.55],
-                [24.55,24.55]
+                [14.2578,14.4531],
+                [24.4141,14.4531],
+                [14.2578,24.8047],
+                [24.4141,24.8047]
             ],
 
             green: [
-                [14.25,75.25],
-                [24.55,75.25],
-                [14.25,85.45],
-                [24.55,85.45]
+                [14.2578,75.3906],
+                [24.4141,75.3906],
+                [14.2578,85.5469],
+                [24.4141,85.5469]
             ],
 
             blue: [
-                [75.25,14.35],
-                [85.45,14.35],
-                [75.25,24.55],
-                [85.45,24.55]
+                [75.0000,14.4531],
+                [85.3516,14.4531],
+                [75.0000,24.8047],
+                [85.3516,24.8047]
             ],
 
             yellow: [
-                [75.25,75.25],
-                [85.45,75.25],
-                [75.25,85.45],
-                [85.45,85.45]
+                [75.0000,75.3906],
+                [85.3516,75.3906],
+                [75.0000,85.5469],
+                [85.3516,85.5469]
             ],
 
             /* Purple/orange are never placed in the center.
@@ -1722,102 +1724,50 @@ function tokenPosition(color, position, tokenIndex) {
 ===================================================== */
 
 function renderTokens() {
-    const board = document.getElementById('board');
-    const layer = document.getElementById('tokenLayer');
-    if (!board || !layer) return;
-
-    // Clear only gameplay tokens from the dedicated layer.
-    layer.replaceChildren();
-
-    const fallbackPlayers = [
-        {color:'red',    name:'Player 1', tokens:[-1,-1,-1,-1], isComputer:false},
-        {color:'green',  name:'Player 2', tokens:[-1,-1,-1,-1], isComputer:false},
-        {color:'blue',   name:'Player 3', tokens:[-1,-1,-1,-1], isComputer:false},
-        {color:'yellow', name:'Player 4', tokens:[-1,-1,-1,-1], isComputer:false}
+    const layer=document.getElementById('tokenLayer');
+    if(!layer)return;
+    const fallback=[
+      {color:'red',name:'Player 1',tokens:[-1,-1,-1,-1]},
+      {color:'green',name:'Player 2',tokens:[-1,-1,-1,-1]},
+      {color:'blue',name:'Player 3',tokens:[-1,-1,-1,-1]},
+      {color:'yellow',name:'Player 4',tokens:[-1,-1,-1,-1]}
     ];
-
-    // Always draw the 16 starting tokens if real game data is not ready.
-    const hasRealPlayers = Array.isArray(players) && players.length > 0;
-    const sourcePlayers = hasRealPlayers ? players : fallbackPlayers;
-    const isFallback = !hasRealPlayers;
-
-    const groups = {};
-    sourcePlayers.forEach((player, playerIndex) => {
-        const color = player && player.color ? player.color : fallbackPlayers[playerIndex]?.color;
-        if (!color) return;
-        const tokenList = Array.isArray(player.tokens) ? player.tokens : [-1,-1,-1,-1];
-        for (let tokenIndex = 0; tokenIndex < 4; tokenIndex++) {
-            const rawPosition = tokenList[tokenIndex];
-            const position = Number.isFinite(Number(rawPosition)) ? Number(rawPosition) : -1;
-            const safePlayer = {...player, color, tokens:tokenList};
-            const pos = tokenPosition(color, position, tokenIndex);
-            const key = pos.left.toFixed(3)+','+pos.top.toFixed(3);
-            if (!groups[key]) groups[key]=[];
-            groups[key].push({player:safePlayer,playerIndex,position,tokenIndex,pos});
-        }
+    const real=Array.isArray(players)&&players.length>0;
+    const source=real?players:fallback;
+    const items=[];
+    source.forEach((p,pi)=>{
+      const color=p?.color||fallback[pi]?.color;if(!color)return;
+      const ts=Array.isArray(p.tokens)?p.tokens:[-1,-1,-1,-1];
+      for(let ti=0;ti<4;ti++){
+        const raw=ts[ti],pos=Number.isFinite(Number(raw))?Number(raw):-1;
+        items.push({p,pi,ti,color,pos,xy:tokenPosition(color,pos,ti)});
+      }
     });
-
-    Object.values(groups).forEach(group=>{
-        const count=group.length;
-        const offsets = count===2 ? [[-1.8,0],[1.8,0]] :
-                         count===3 ? [[-2,0],[0,-1.8],[2,0]] :
-                         count>=4 ? [[-1.7,-1.7],[1.7,-1.7],[-1.7,1.7],[1.7,1.7]] :
-                         [[0,0]];
-
-        group.forEach((item,stackIndex)=>{
-            const token=document.createElement('div');
-            token.className='token '+item.player.color;
-            if(item.position===-1) token.classList.add('home-token');
-            if(count===2) token.classList.add('stack2');
-            if(count===3) token.classList.add('stack3');
-            if(count>=4) token.classList.add('stack4');
-
-            token.dataset.player=String(item.playerIndex);
-            token.dataset.token=String(item.tokenIndex);
-
-            const off=offsets[stackIndex]||[0,0];
-            token.style.setProperty('left',(item.pos.left+off[0])+'%','important');
-            token.style.setProperty('top',(item.pos.top+off[1])+'%','important');
-            token.style.setProperty('transform','translate3d(-50%,-50%,0)','important');
-            token.style.setProperty('display','block','important');
-            token.style.setProperty('visibility','visible','important');
-            token.style.setProperty('opacity','1','important');
-            token.style.setProperty('z-index','10000','important');
-            token.style.pointerEvents='auto';
-            token.style.touchAction='manipulation';
-            token.title=item.player.name || ('Player '+(item.playerIndex+1));
-
-            const onlineMovePhase = online && !window.computerMode &&
-                players[currentPlayer]?.uid===uid &&
-                !awaitingRoll &&
-                Number.isInteger(Number(diceValue)) && Number(diceValue)>=1 && Number(diceValue)<=6;
-            const localMovePhase = !online && !awaitingRoll && moveChoiceOpen;
-            const humanTurn = !isFallback &&
-                item.playerIndex===currentPlayer &&
-                !item.player.isComputer &&
-                !botThinking &&
-                !autoMovePending &&
-                (onlineMovePhase || localMovePhase) &&
-                !(window.computerMode && players[currentPlayer]?.isComputer);
-
-            if(humanTurn && canMove(item.player,item.position,item.tokenIndex)){
-                token.classList.add('movable');
-            }
-
-            token.addEventListener('click',event=>{
-                event.stopPropagation();
-                if(!humanTurn) return;
-                moveToken(item.playerIndex,item.tokenIndex);
-            });
-
-            layer.appendChild(token);
-        });
+    const existing=Array.from(layer.querySelectorAll('.token'));
+    while(existing.length<items.length){
+      const t=document.createElement('div');t.className='token';layer.appendChild(t);existing.push(t);
+    }
+    const groups={};
+    items.forEach(x=>{const k=x.xy.left.toFixed(3)+','+x.xy.top.toFixed(3);(groups[k]??=[]).push(x);});
+    items.forEach((x,i)=>{
+      const t=existing[i],g=groups[x.xy.left.toFixed(3)+','+x.xy.top.toFixed(3)],si=g.indexOf(x);
+      const o=g.length===2?[[-1.8,0],[1.8,0]][si] : g.length===3?[[-2,0],[0,-1.8],[2,0]][si] : g.length>=4?[[-1.7,-1.7],[1.7,-1.7],[-1.7,1.7],[1.7,1.7]][si] : [0,0];
+      t.className='token '+x.color+(x.pos===-1?' home-token':'');
+      if(g.length===2)t.classList.add('stack2');if(g.length===3)t.classList.add('stack3');if(g.length>=4)t.classList.add('stack4');
+      t.dataset.player=x.pi;t.dataset.token=x.ti;
+      t.style.setProperty('left',(x.xy.left+o[0])+'%','important');
+      t.style.setProperty('top',(x.xy.top+o[1])+'%','important');
+      t.style.setProperty('display','block','important');t.style.setProperty('visibility','visible','important');t.style.setProperty('opacity','1','important');t.style.setProperty('z-index','2147483647','important');t.style.setProperty('transform','translate3d(-50%,-50%,0)','important');
+      t.style.pointerEvents='auto';t.style.touchAction='manipulation';t.title=x.p.name||('Player '+(x.pi+1));
+      const onlineMove=online&&!window.computerMode&&players[currentPlayer]?.uid===uid&&!awaitingRoll&&Number(diceValue)>=1&&Number(diceValue)<=6;
+      const localMove=!online&&!awaitingRoll&&moveChoiceOpen;
+      const human=real&&x.pi===currentPlayer&&!x.p.isComputer&&!botThinking&&!autoMovePending&&(onlineMove||localMove)&&!(window.computerMode&&players[currentPlayer]?.isComputer);
+      t.classList.toggle('movable',human&&canMove(x.p,x.pos,x.ti));
+      if(!t.dataset.bound){t.addEventListener('click',e=>{e.stopPropagation();const pi=Number(t.dataset.player),ti=Number(t.dataset.token),p=players[pi];if(!p)return;if(online?(p.uid!==uid||pi!==currentPlayer||awaitingRoll):(pi!==currentPlayer||p.isComputer||!moveChoiceOpen))return;moveToken(pi,ti);});t.dataset.bound='1';}
     });
+    for(let i=items.length;i<existing.length;i++)existing[i].style.setProperty('display','none','important');
 }
 
-/* =====================================================
-   SMOOTH COIN MOVEMENT
-===================================================== */
 function animateTokenMove(playerIndex, tokenIndex, fromPos, toPos) {
     return new Promise(resolve => {
         const player = players[playerIndex];
