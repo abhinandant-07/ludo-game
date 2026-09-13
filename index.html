@@ -418,47 +418,21 @@ Vertical path
 }
 
 
-#tokenLayer{
-    position:absolute!important;
-    inset:0!important;
-    width:100%!important;
-    height:100%!important;
-    z-index:9999!important;
-    pointer-events:none;
-    display:block!important;
-    visibility:visible!important;
-    opacity:1!important;
-}
-#tokenLayer > .token{
-    position:absolute!important;
-    display:block!important;
-    visibility:visible!important;
-    opacity:1!important;
-    z-index:10000!important;
-    pointer-events:auto;
-}
-
 /* =====================================================
    TOKENS
 ===================================================== */
 
 .token {
     position: absolute;
-    /* Responsive size keeps every token proportional to the board. */
-    width: clamp(20px, 3.75%, 30px);
-    height: clamp(23px, 4.25%, 34px);
+    width: 30px;
+    height: 34px;
     border-radius: 50% 50% 42% 42% / 42% 42% 58% 58%;
-    border: clamp(2px, .38vw, 3px) solid white;
-    box-shadow: 0 4px 6px rgba(0,0,0,.34), inset 0 2px 0 rgba(255,255,255,.38);
+    border: 3px solid white;
+    box-shadow: 0 5px 6px rgba(0,0,0,.38), inset 0 3px 0 rgba(255,255,255,.38);
     z-index: 50;
     cursor: pointer;
-    transform: translate3d(-50%, -50%, 0) scale(1);
-    transform-origin: center center;
-    transition: left .18s cubic-bezier(.22,.61,.36,1),
-                top .18s cubic-bezier(.22,.61,.36,1),
-                transform .16s cubic-bezier(.22,.61,.36,1);
-    will-change: left, top, transform;
-    backface-visibility: hidden;
+    transform: translate(-50%, -50%);
+    transition: left .23s linear, top .23s linear, transform .23s;
 }
 .token::before{
     content:"";
@@ -480,7 +454,7 @@ Vertical path
 }
 
 .token:hover {
-    transform: translate3d(-50%, -50%, 0) scale(1.08);
+    transform: translate(-50%, -50%) scale(1.12);
 }
 
 .token.red {
@@ -512,31 +486,8 @@ Vertical path
     z-index:200;
 }
 
-/* Smooth movement state: no jump when a token is travelling between cells. */
-.token.moving {
-    z-index: 220;
-    pointer-events: none;
-    transition: left .16s cubic-bezier(.22,.61,.36,1),
-                top .16s cubic-bezier(.22,.61,.36,1),
-                transform .16s cubic-bezier(.22,.61,.36,1);
-}
-
-/* Base tokens are centered on the four printed home holes. */
-.token.home-token {
-    width: clamp(22px, 3.55%, 28px);
-    height: clamp(25px, 3.9%, 31px);
-}
-
-/* Tokens are real board children and must sit above the reference image. */
-#board > .token{
-    display:block!important;
-    visibility:visible!important;
-    opacity:1!important;
-    z-index:500!important;
-}
-
-.token.stack2{width:clamp(17px,2.75%,22px);height:clamp(20px,3.15%,25px);}
-.token.stack3,.token.stack4{width:clamp(15px,2.4%,19px);height:clamp(18px,2.75%,22px);}
+.token.stack2{width:22px;height:25px;}
+.token.stack3,.token.stack4{width:19px;height:22px;}
 @media(max-width:550px){
     .token.stack2{width:17px;height:20px;}
     .token.stack3,.token.stack4{width:15px;height:18px;}
@@ -544,11 +495,11 @@ Vertical path
 
 @keyframes pulse {
     from {
-        transform: translate3d(-50%, -50%, 0) scale(1);
+        transform: translate(-50%, -50%) scale(1);
     }
 
     to {
-        transform: translate3d(-50%, -50%, 0) scale(1.10);
+        transform: translate(-50%, -50%) scale(1.16);
     }
 }
 
@@ -790,10 +741,6 @@ Vertical path
     }
 }
 
-@media (prefers-reduced-motion: reduce){
-  .token,.token.moving,.token.movable{animation:none!important;transition:transform .08s linear,left .08s linear,top .08s linear!important;}
-}
-
 .modalScreen{display:none;position:fixed;inset:0;z-index:9999;min-height:100vh;align-items:center;justify-content:center;padding:20px;background:rgba(12,18,32,.96);overflow:auto}.wideBtn{width:100%;border:0;border-radius:14px;padding:15px;margin:7px 0;background:#34415a;color:#fff;font-size:17px;font-weight:bold;cursor:pointer}.wideBtn:hover{background:#465671}.roomInput{width:100%;padding:15px;border:0;border-radius:12px;text-align:center;font-size:22px;letter-spacing:5px;margin:10px 0;text-transform:uppercase}.roomCode{font-size:38px;font-weight:900;letter-spacing:8px;margin:12px 0}.lobbyBox{max-width:500px}.lobbyPlayer{display:flex;align-items:center;gap:10px;padding:9px;background:#29364d;border-radius:10px;margin:6px 0;text-align:left}.colorChoices{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 15px}.colorChoice{border:2px solid transparent;border-radius:12px;padding:11px;color:white;font-weight:bold;cursor:pointer}.colorChoice.taken{opacity:.28;cursor:not-allowed}.colorChoice.selected{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.25)}.colorChoice.red{background:#ef302b}.colorChoice.green{background:#38a900}.colorChoice.yellow{background:#c99800}.colorChoice.blue{background:#087bea}.colorChoice.purple{background:#8b3dcc}.colorChoice.orange{background:#ed7414}.computerBtn{grid-column:1 / 3!important;background:#6a4bc0!important}
 @media(max-width:550px){.colorChoices{grid-template-columns:repeat(2,1fr)}}
 
@@ -843,8 +790,7 @@ html,body{width:100%;min-width:0;overflow-x:hidden;}
   .sidePanel{padding:12px;}
   .dice{width:78px;height:78px;padding:11px;margin:8px auto 12px;}
   .dot{width:10px;height:10px;}
-  .token{width:clamp(18px,3.75vw,22px);height:clamp(20px,4.25vw,25px);}
-  .token.home-token{width:clamp(18px,3.55vw,21px);height:clamp(20px,3.9vw,23px);}
+  .token{width:20px;height:23px;}
   .token::before{width:11px;height:11px;top:3px;}
   .token::after{width:17px;height:5px;bottom:-5px;}
   .voicePanel{padding:8px;}
@@ -857,15 +803,6 @@ html,body{width:100%;min-width:0;overflow-x:hidden;}
   .turn{font-size:11px;padding:6px 8px;}
 }
 
-
-/* Exact home-hole token centering */
-
-/* FINAL TOKEN VISIBILITY FIX */
-#board{isolation:isolate!important;}
-#tokenLayer{position:absolute!important;left:0!important;top:0!important;right:0!important;bottom:0!important;width:100%!important;height:100%!important;z-index:2147483646!important;display:block!important;visibility:visible!important;opacity:1!important;pointer-events:none!important;overflow:visible!important;isolation:isolate!important;transform:translateZ(0)!important;}
-#tokenLayer .token{position:absolute!important;display:block!important;visibility:visible!important;opacity:1!important;z-index:2147483647!important;pointer-events:auto!important;overflow:visible!important;transform:translate3d(-50%,-50%,0)!important;background-clip:border-box!important;mix-blend-mode:normal!important;}
-#tokenLayer .token.red{background:#d91f1f!important}.token.green{background:#239000!important}.token.blue{background:#0068d8!important}.token.yellow{background:#e5a600!important}.token.purple{background:#8b3dcc!important}.token.orange{background:#ed7414!important;}
-#tokenLayer .token.home-token{width:5.4%!important;height:6%!important;min-width:30px!important;min-height:32px!important;max-width:38px!important;max-height:42px!important;}
 </style>
 </head>
 
@@ -1044,30 +981,10 @@ html,body{width:100%;min-width:0;overflow-x:hidden;}
 
                 <div class="verticalPath" id="verticalPath"></div>
 
+
                 <!-- CENTER -->
 
                 <div class="center"></div>
-
-                <!-- Dedicated gameplay token layer. Always above the board image. -->
-                <div id="tokenLayer" aria-hidden="true">
-                  <div class="token red home-token" data-player="0" data-token="0" style="left:14.2578%;top:14.4531%;"></div>
-                  <div class="token red home-token" data-player="0" data-token="1" style="left:24.4141%;top:14.4531%;"></div>
-                  <div class="token red home-token" data-player="0" data-token="2" style="left:14.2578%;top:24.8047%;"></div>
-                  <div class="token red home-token" data-player="0" data-token="3" style="left:24.4141%;top:24.8047%;"></div>
-                  <div class="token green home-token" data-player="1" data-token="0" style="left:14.2578%;top:75.3906%;"></div>
-                  <div class="token green home-token" data-player="1" data-token="1" style="left:24.4141%;top:75.3906%;"></div>
-                  <div class="token green home-token" data-player="1" data-token="2" style="left:14.2578%;top:85.5469%;"></div>
-                  <div class="token green home-token" data-player="1" data-token="3" style="left:24.4141%;top:85.5469%;"></div>
-                  <div class="token blue home-token" data-player="2" data-token="0" style="left:75%;top:14.4531%;"></div>
-                  <div class="token blue home-token" data-player="2" data-token="1" style="left:85.3516%;top:14.4531%;"></div>
-                  <div class="token blue home-token" data-player="2" data-token="2" style="left:75%;top:24.8047%;"></div>
-                  <div class="token blue home-token" data-player="2" data-token="3" style="left:85.3516%;top:24.8047%;"></div>
-                  <div class="token yellow home-token" data-player="3" data-token="0" style="left:75%;top:75.3906%;"></div>
-                  <div class="token yellow home-token" data-player="3" data-token="1" style="left:85.3516%;top:75.3906%;"></div>
-                  <div class="token yellow home-token" data-player="3" data-token="2" style="left:75%;top:85.5469%;"></div>
-                  <div class="token yellow home-token" data-player="3" data-token="3" style="left:85.3516%;top:85.5469%;"></div>
-                </div>
-
 
 
                 <!-- TOKENS WILL BE CREATED HERE -->
@@ -1574,31 +1491,31 @@ function tokenPosition(color, position, tokenIndex) {
         const homes = {
 
             red: [
-                [14.2578,14.4531],
-                [24.4141,14.4531],
-                [14.2578,24.8047],
-                [24.4141,24.8047]
+                [14.25,14.35],
+                [24.55,14.35],
+                [14.25,24.55],
+                [24.55,24.55]
             ],
 
             green: [
-                [14.2578,75.3906],
-                [24.4141,75.3906],
-                [14.2578,85.5469],
-                [24.4141,85.5469]
+                [14.25,75.25],
+                [24.55,75.25],
+                [14.25,85.45],
+                [24.55,85.45]
             ],
 
             blue: [
-                [75.0000,14.4531],
-                [85.3516,14.4531],
-                [75.0000,24.8047],
-                [85.3516,24.8047]
+                [75.25,14.35],
+                [85.45,14.35],
+                [75.25,24.55],
+                [85.45,24.55]
             ],
 
             yellow: [
-                [75.0000,75.3906],
-                [85.3516,75.3906],
-                [75.0000,85.5469],
-                [85.3516,85.5469]
+                [75.25,75.25],
+                [85.45,75.25],
+                [75.25,85.45],
+                [85.45,85.45]
             ],
 
             /* Purple/orange are never placed in the center.
@@ -1724,50 +1641,71 @@ function tokenPosition(color, position, tokenIndex) {
 ===================================================== */
 
 function renderTokens() {
-    const layer=document.getElementById('tokenLayer');
-    if(!layer)return;
-    const fallback=[
-      {color:'red',name:'Player 1',tokens:[-1,-1,-1,-1]},
-      {color:'green',name:'Player 2',tokens:[-1,-1,-1,-1]},
-      {color:'blue',name:'Player 3',tokens:[-1,-1,-1,-1]},
-      {color:'yellow',name:'Player 4',tokens:[-1,-1,-1,-1]}
-    ];
-    const real=Array.isArray(players)&&players.length>0;
-    const source=real?players:fallback;
-    const items=[];
-    source.forEach((p,pi)=>{
-      const color=p?.color||fallback[pi]?.color;if(!color)return;
-      const ts=Array.isArray(p.tokens)?p.tokens:[-1,-1,-1,-1];
-      for(let ti=0;ti<4;ti++){
-        const raw=ts[ti],pos=Number.isFinite(Number(raw))?Number(raw):-1;
-        items.push({p,pi,ti,color,pos,xy:tokenPosition(color,pos,ti)});
-      }
+    document.querySelectorAll(".token").forEach(t => t.remove());
+
+    const board = document.getElementById("board");
+    const items = [];
+    const groups = {};
+
+    players.forEach((player, playerIndex) => {
+        player.tokens.forEach((position, tokenIndex) => {
+            const pos = tokenPosition(player.color, position, tokenIndex);
+            const key = pos.left.toFixed(3) + "," + pos.top.toFixed(3);
+            if (!groups[key]) groups[key] = [];
+            const item = {player, playerIndex, position, tokenIndex, pos, key};
+            groups[key].push(item);
+            items.push(item);
+        });
     });
-    const existing=Array.from(layer.querySelectorAll('.token'));
-    while(existing.length<items.length){
-      const t=document.createElement('div');t.className='token';layer.appendChild(t);existing.push(t);
-    }
-    const groups={};
-    items.forEach(x=>{const k=x.xy.left.toFixed(3)+','+x.xy.top.toFixed(3);(groups[k]??=[]).push(x);});
-    items.forEach((x,i)=>{
-      const t=existing[i],g=groups[x.xy.left.toFixed(3)+','+x.xy.top.toFixed(3)],si=g.indexOf(x);
-      const o=g.length===2?[[-1.8,0],[1.8,0]][si] : g.length===3?[[-2,0],[0,-1.8],[2,0]][si] : g.length>=4?[[-1.7,-1.7],[1.7,-1.7],[-1.7,1.7],[1.7,1.7]][si] : [0,0];
-      t.className='token '+x.color+(x.pos===-1?' home-token':'');
-      if(g.length===2)t.classList.add('stack2');if(g.length===3)t.classList.add('stack3');if(g.length>=4)t.classList.add('stack4');
-      t.dataset.player=x.pi;t.dataset.token=x.ti;
-      t.style.setProperty('left',(x.xy.left+o[0])+'%','important');
-      t.style.setProperty('top',(x.xy.top+o[1])+'%','important');
-      t.style.setProperty('display','block','important');t.style.setProperty('visibility','visible','important');t.style.setProperty('opacity','1','important');t.style.setProperty('z-index','2147483647','important');t.style.setProperty('transform','translate3d(-50%,-50%,0)','important');
-      t.style.pointerEvents='auto';t.style.touchAction='manipulation';t.title=x.p.name||('Player '+(x.pi+1));
-      const onlineMove=online&&!window.computerMode&&players[currentPlayer]?.uid===uid&&!awaitingRoll&&Number(diceValue)>=1&&Number(diceValue)<=6;
-      const localMove=!online&&!awaitingRoll&&moveChoiceOpen;
-      const human=real&&x.pi===currentPlayer&&!x.p.isComputer&&!botThinking&&!autoMovePending&&(onlineMove||localMove)&&!(window.computerMode&&players[currentPlayer]?.isComputer);
-      t.classList.toggle('movable',human&&canMove(x.p,x.pos,x.ti));
-      if(!t.dataset.bound){t.addEventListener('click',e=>{e.stopPropagation();const pi=Number(t.dataset.player),ti=Number(t.dataset.token),p=players[pi];if(!p)return;if(online?(p.uid!==uid||pi!==currentPlayer||awaitingRoll):(pi!==currentPlayer||p.isComputer||!moveChoiceOpen))return;moveToken(pi,ti);});t.dataset.bound='1';}
+
+    Object.values(groups).forEach(group => {
+        const count = group.length;
+        const offsets = count === 2 ? [[-1.8,0],[1.8,0]] :
+                        count === 3 ? [[-2,0],[0,-1.8],[2,0]] :
+                        count >= 4 ? [[-1.7,-1.7],[1.7,-1.7],[-1.7,1.7],[1.7,1.7]] :
+                        [[0,0]];
+
+        group.forEach((item, stackIndex) => {
+            const token = document.createElement("div");
+            token.className = "token " + item.player.color;
+            token.dataset.player = item.playerIndex;
+            token.dataset.token = item.tokenIndex;
+
+            const off = offsets[stackIndex] || [0,0];
+            token.style.left = (item.pos.left + off[0]) + "%";
+            token.style.top = (item.pos.top + off[1]) + "%";
+
+            if (count === 2) token.classList.add("stack2");
+            if (count === 3) token.classList.add("stack3");
+            if (count >= 4) token.classList.add("stack4");
+
+            const humanTurn = item.playerIndex === currentPlayer &&
+                              !item.player.isComputer &&
+                              !botThinking &&
+                              !autoMovePending &&
+                              !awaitingRoll &&
+                              moveChoiceOpen &&
+                              !(window.computerMode && players[currentPlayer] && players[currentPlayer].isComputer);
+
+            if (humanTurn && canMove(item.player, item.position, item.tokenIndex)) {
+                token.classList.add("movable");
+            }
+
+            token.onclick = function(event) {
+                event.stopPropagation();
+                if (!humanTurn) return;
+                moveToken(item.playerIndex, item.tokenIndex);
+            };
+
+            board.appendChild(token);
+        });
     });
-    for(let i=items.length;i<existing.length;i++)existing[i].style.setProperty('display','none','important');
 }
 
+
+/* =====================================================
+   SMOOTH COIN MOVEMENT
+===================================================== */
 function animateTokenMove(playerIndex, tokenIndex, fromPos, toPos) {
     return new Promise(resolve => {
         const player = players[playerIndex];
@@ -1800,7 +1738,7 @@ function animateTokenMove(playerIndex, tokenIndex, fromPos, toPos) {
             token.style.left = pos.left + '%';
             token.style.top = pos.top + '%';
             n++;
-            setTimeout(run, 175);
+            setTimeout(run, 260);
         };
         run();
     });
@@ -2187,6 +2125,406 @@ function backToMenu() {
 
 </script>
 
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
+import { getDatabase, ref, get, set, update, onValue, onDisconnect, runTransaction } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-database.js";
 
-<script>setTimeout(function(){startGame(4);},50);</script></body>
+const firebaseConfig={
+ apiKey:"AIzaSyAjgffLiCYZpabBSPvh6ihBOmIfctWIKUA",
+ authDomain:"ludo-61fbe.firebaseapp.com",
+ databaseURL:"https://ludo-61fbe-default-rtdb.firebaseio.com/",
+ projectId:"ludo-61fbe",
+ storageBucket:"ludo-61fbe.firebasestorage.app",
+ messagingSenderId:"305223845013",
+ appId:"1:305223845013:web:c93e49fe5dc93fc4e9c79c",
+ measurementId:"G-LDQSJEP1XZ"
+};
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getDatabase(app);
+window.computerMode=false;
+let uid=null,online=false,onlineRoom=null,onlineMax=2,onlineColor=null,roomUnsub=null,gameUnsub=null,originalStartGame=window.startGame,originalRollDice=window.rollDice,originalMoveToken=window.moveToken;
+let authReady=new Promise(resolve=>onAuthStateChanged(auth,user=>{uid=user?user.uid:null;resolve(uid);}));
+
+function show(id){document.querySelectorAll('.modalScreen').forEach(x=>x.style.display='none');document.getElementById(id).style.display='flex'}
+function hide(id){document.getElementById(id).style.display='none'}
+window.backHome=()=>{show('setupScreen');document.getElementById('setupScreen').style.display='flex'};
+window.chooseOnline=n=>{window.computerMode=false;onlineMax=n;document.getElementById('modeTitle').textContent=`Online • ${n} Players`;show('modeScreen')};
+window.chooseComputer=()=>{
+  window.computerMode=true;
+  const colors=['red','green','yellow','blue','purple','orange'];
+  document.getElementById('computerColors').innerHTML=colors.map(c=>`<button class="colorChoice ${c}" onclick="startComputerGame('${c}')">${c[0].toUpperCase()+c.slice(1)}</button>`).join('');
+  show('computerColorScreen');
+};
+window.startComputerGame=(myColor)=>{
+  online=false;
+  onlineRoom=null;
+  onlineColor=null;
+  window.computerMode=true;
+  botThinking=false;
+  const colors=['red','green','yellow','blue','purple','orange'];
+  const botColor=colors.find(c=>c!==myColor);
+  activePlayers=[myColor,botColor];
+  players=[
+    {color:myColor,name:'You',tokens:[-1,-1,-1,-1],isComputer:false},
+    {color:botColor,name:'Computer',tokens:[-1,-1,-1,-1],isComputer:true}
+  ];
+  currentPlayer=0;
+  diceValue=1;
+  awaitingRoll=true;
+  rolling=false;
+  botThinking=false;
+  autoMovePending=false;
+  moveChoiceOpen=false;
+  document.getElementById('computerColorScreen').style.display='none';
+  document.getElementById('setupScreen').style.display='none';
+  document.getElementById('gameScreen').style.display='block';
+  createBoard();
+  setDice(1);
+  updateTurn();
+  botThinking=false;
+  window.computerMode=true;
+  // Human starts first. The bot is started automatically by nextPlayer().
+};
+window.showMode=()=>show('modeScreen');window.showJoin=()=>show('joinScreen');
+
+signInAnonymously(auth).catch(e=>{console.error(e);alert('Firebase login failed: '+e.message)});
+function code(){return Math.random().toString(36).slice(2,8).toUpperCase()}
+function roomRef(){return ref(db,'rooms/'+onlineRoom)}
+
+window.createRoom=async()=>{try{await authReady;if(!uid){throw new Error('Firebase login is not ready. Please wait 1 second and try again.')}let c='';for(let i=0;i<8;i++){c=code();const snap=await get(ref(db,'rooms/'+c));if(!snap.exists())break}onlineRoom=c;online=true;onlineColor=null;document.getElementById('roomCode').textContent=c;openLobby();await set(roomRef(),{maxPlayers:onlineMax,status:'waiting',hostId:uid,createdAt:Date.now(),players:{[uid]:{name:'Player 1',uid,connected:true,color:null,joinedAt:Date.now()}}});await onDisconnect(ref(db,'rooms/'+c+'/players/'+uid+'/connected')).set(false);document.getElementById('lobbyStatus').textContent='Room created • choose your color';}catch(e){console.error(e);alert('Could not create room: '+e.message)}};
+window.joinRoom=async()=>{const c=(document.getElementById('roomInput').value||'').trim().toUpperCase();if(c.length!==6){alert('Enter the 6-character room code.');return}if(!uid){alert('Connecting to Firebase... try again in a moment.');return}const snap=await get(ref(db,'rooms/'+c));if(!snap.exists()){alert('Room not found.');return}const r=snap.val();const count=Object.values(r.players||{}).filter(p=>p.connected!==false).length;if(count>=r.maxPlayers){alert('Room is full.');return}onlineRoom=c;online=true;onlineMax=r.maxPlayers;onlineColor=null;await set(ref(db,'rooms/'+c+'/players/'+uid),{name:'Player '+(count+1),uid,connected:true,color:null,joinedAt:Date.now()});await onDisconnect(ref(db,'rooms/'+c+'/players/'+uid+'/connected')).set(false);openLobby()};
+function openLobby(){
+  show('lobbyScreen');
+  document.getElementById('roomCode').textContent=onlineRoom;
+  renderColors();
+  if(roomUnsub) roomUnsub();
+  roomUnsub=onValue(roomRef(),snap=>{
+    const r=snap.val();
+    if(!r){ alert('Room closed.'); leaveRoom(); return; }
+    renderLobby(r);
+    if(r.status==='playing' && !gameUnsub) startSyncedGame(r);
+  });
+}
+
+function renderLobby(r){
+  const ps=Object.values(r.players||{});
+  const alive=ps.filter(p=>p.connected!==false);
+  document.getElementById('lobbyStatus').textContent=`${alive.length}/${r.maxPlayers} connected • ${r.hostId===uid?'You are host':'Waiting for host'}`;
+  document.getElementById('lobbyPlayers').innerHTML=ps.map(p=>`<div class="lobbyPlayer"><span class="playerColor ${p.color||'red'}"></span><b>${p.name}</b>${p.uid===r.hostId?' 👑':''}${p.uid===uid?' (You)':''}${p.connected===false?' (offline)':''}</div>`).join('');
+  renderColors(r);
+  const me=r.players?.[uid];
+  onlineColor=me?.color||null;
+  document.getElementById('startOnlineBtn').disabled=!(r.hostId===uid&&alive.length>=2&&onlineColor);
+}
+
+function renderColors(r=null){
+  const taken={};
+  if(r) Object.values(r.players||{}).forEach(p=>{if(p.color)taken[p.color]=p.uid});
+  document.getElementById('colorChoices').innerHTML=['red','green','yellow','blue','purple','orange'].map(c=>`<button class="colorChoice ${c} ${taken[c]&&taken[c]!==uid?'taken':''} ${taken[c]===uid?'selected':''}" ${taken[c]&&taken[c]!==uid?'disabled':''} onclick="selectColor('${c}')">${c[0].toUpperCase()+c.slice(1)}${taken[c]===uid?' ✓':''}</button>`).join('')
+}
+
+window.selectColor=async c=>{
+  if(!onlineRoom||!uid)return;
+  const tx=await runTransaction(ref(db,'rooms/'+onlineRoom+'/colors/'+c),cur=>cur==null?uid:(cur===uid?cur:cur));
+  if(!tx.committed||tx.snapshot.val()!==uid){alert('That color is already taken.');return}
+  if(onlineColor&&onlineColor!==c) await set(ref(db,'rooms/'+onlineRoom+'/colors/'+onlineColor),null);
+  await update(ref(db,'rooms/'+onlineRoom+'/players/'+uid),{color:c});
+  onlineColor=c;
+};
+
+window.startOnlineGame=async()=>{
+  try{
+    const snap=await get(roomRef());
+    const r=snap.val();
+    if(!r||r.hostId!==uid)return;
+    const ps=Object.values(r.players||{}).filter(p=>p.connected!==false&&p.color);
+    if(ps.length<2){alert('At least 2 connected players with colors are required.');return;}
+    const gamePlayers=ps.map(p=>({uid:p.uid,name:p.name,color:p.color,tokens:[-1,-1,-1,-1]}));
+    await update(roomRef(),{status:'playing',game:{players:gamePlayers,currentPlayer:0,diceValue:1,phase:'roll',winner:null}});
+  }catch(e){console.error(e);alert('Could not start game: '+e.message)}
+};
+
+function startSyncedGame(r){
+  window.computerMode=false;
+  awaitingRoll=true;
+  moveChoiceOpen=false;
+  rolling=false;
+  hide('lobbyScreen');
+  document.getElementById('setupScreen').style.display='none';
+  document.getElementById('gameScreen').style.display='block';
+  const g=r.game;
+  if(!g)return;
+  players=g.players||[];
+  currentPlayer=Number(g.currentPlayer||0);
+  ensureVoicePanel();
+  diceValue=Number(g.diceValue||1);
+  setDice(diceValue);
+  createBoard();
+  updateTurn();
+  renderTokens();
+  if(gameUnsub) gameUnsub();
+  gameUnsub=onValue(ref(db,'rooms/'+onlineRoom+'/game'),s=>{
+    const x=s.val();
+    if(!x)return;
+    players=x.players||[];
+    currentPlayer=Number(x.currentPlayer||0);
+    refreshVoiceForPlayers();
+    diceValue=Number(x.diceValue||1);
+    const mine=players[currentPlayer]?.uid===uid;
+    awaitingRoll=!mine || x.phase!=='move';
+    setDice(diceValue);
+    updateTurn();
+    renderTokens();
+    if(x.winner){
+      const winner=players.find(p=>p.uid===x.winner);
+      if(winner) document.getElementById('turnText').textContent=winner.name+' Wins!';
+    }
+  });
+}
+
+window.rollDice=async()=>{
+  if(window.computerMode){originalRollDice();return;}
+  if(!online||!onlineRoom){originalRollDice();return;}
+  if(rolling)return;
+  rolling=true;
+  try{
+    const gameRef=ref(db,'rooms/'+onlineRoom+'/game');
+    const tx=await runTransaction(gameRef,g=>{
+      if(!g||g.phase!=='roll'||!g.players?.[g.currentPlayer]||g.players[g.currentPlayer].uid!==uid)return;
+      return {...g,diceValue:Math.floor(Math.random()*6)+1,phase:'move'};
+    });
+    if(!tx.committed){rolling=false;return;}
+    const g=tx.snapshot.val(),v=Number(g.diceValue);
+    diceValue=v;
+    setDice(v);
+    setTimeout(()=>autoPass(v),450);
+  }catch(e){console.error(e)}finally{
+    setTimeout(()=>{rolling=false},450);
+  }
+};
+
+async function autoPass(v){
+  if(!onlineRoom||!uid)return;
+  try{
+    const gameRef=ref(db,'rooms/'+onlineRoom+'/game');
+    await runTransaction(gameRef,g=>{
+      if(!g||g.phase!=='move'||Number(g.diceValue)!==Number(v))return;
+      const p=g.players?.[g.currentPlayer];
+      if(!p||p.uid!==uid)return;
+      const possible=p.tokens.some(pos=>pos===-1?v===6:(pos>=0&&pos<57&&pos+v<=57));
+      if(possible)return;
+      if(v===6)return {...g,diceValue:1,phase:'roll'};
+      return {...g,currentPlayer:(g.currentPlayer+1)%g.players.length,diceValue:1,phase:'roll'};
+    });
+  }catch(e){console.error(e)}
+}
+
+window.moveToken=async(playerIndex,tokenIndex)=>{
+  if(window.computerMode){originalMoveToken(playerIndex,tokenIndex);return;}
+  if(!online||!onlineRoom){originalMoveToken(playerIndex,tokenIndex);return;}
+  try{
+    const gameRef=ref(db,'rooms/'+onlineRoom+'/game');
+    await runTransaction(gameRef,g=>{
+      if(!g||g.phase!=='move')return;
+      if(Number(g.currentPlayer)!==Number(playerIndex)||g.players?.[g.currentPlayer]?.uid!==uid)return;
+      const p=g.players[playerIndex];
+      const v=Number(g.diceValue),pos0=Number(p.tokens?.[tokenIndex]);
+      if(!Number.isFinite(pos0)||pos0>=57||(pos0===-1&&v!==6)||(pos0!==-1&&(pos0+v>57)))return;
+      const pos=pos0===-1?0:pos0+v;
+      const arr=g.players.map(x=>({...x,tokens:[...x.tokens]}));
+      arr[playerIndex].tokens[tokenIndex]=pos;
+      let captured=false;
+      const actual=((START[p.color]||0)+pos)%52;
+      if(pos>=0&&pos<52&&!SAFE.includes(actual)){
+        for(let j=0;j<arr.length;j++){
+          if(j===playerIndex)continue;
+          for(let k=0;k<4;k++){
+            const q=Number(arr[j].tokens[k]);
+            if(q>=0&&q<52&&((START[arr[j].color]||0)+q)%52===actual){arr[j].tokens[k]=-1;captured=true;}
+          }
+        }
+      }
+      const won=arr[playerIndex].tokens.every(x=>Number(x)>=57);
+      const extra=shouldGrantExtraTurn(v,captured,pos);
+      const nextPlayerIndex=extra?Number(g.currentPlayer):(Number(g.currentPlayer)+1)%arr.length;
+      return { ...g,players:arr,currentPlayer:nextPlayerIndex,diceValue:1,phase:'roll',winner:won?p.uid:null };
+    });
+  }catch(e){console.error(e)}
+};
+
+/* =====================================================
+   WEBRTC VOICE CHAT — ONLINE ROOM ONLY
+   Mesh voice: one peer connection per remote player.
+===================================================== */
+const voicePeers=new Map();
+const voiceUnsubs=new Map();
+let voiceStream=null;
+let voiceEnabled=false;
+let voiceBoundRoom=null;
+
+function voicePair(a,b){return [a,b].sort().join('_')}
+function voicePath(pair){return ref(db,'rooms/'+onlineRoom+'/voice/'+pair)}
+function activeRemotePlayers(){
+  return (players||[]).filter(p=>p && p.uid && p.uid!==uid);
+}
+function setVoiceStatus(text){
+  const el=document.getElementById('voiceStatus');
+  if(el)el.textContent=text;
+}
+function ensureVoicePanel(){
+  const panel=document.getElementById('voicePanel');
+  if(panel)panel.style.display=(online && onlineRoom)?'block':'none';
+}
+
+function addRemoteAudio(peerUid,stream){
+  let audio=document.getElementById('voiceAudio_'+peerUid);
+  if(!audio){
+    audio=document.createElement('audio');
+    audio.id='voiceAudio_'+peerUid;
+    audio.autoplay=true;
+    audio.playsInline=true;
+    audio.style.display='none';
+    document.body.appendChild(audio);
+  }
+  audio.srcObject=stream;
+  audio.play().catch(()=>{});
+}
+
+async function createVoicePeer(remoteUid,initiator){
+  if(!voiceStream || !onlineRoom || !uid || !remoteUid)return;
+  const existing=voicePeers.get(remoteUid);
+  if(existing?.pc)return existing.pc;
+  const pair=voicePair(uid,remoteUid);
+  const pc=new RTCPeerConnection({
+    iceServers:[
+      {urls:'stun:stun.l.google.com:19302'},
+      {urls:'stun:stun1.l.google.com:19302'}
+    ]
+  });
+  const entry={pc,remoteUid,seenCandidates:new Set()};
+  voicePeers.set(remoteUid,entry);
+  voicePeers.get(remoteUid).unsubs=[];
+  voiceStream.getTracks().forEach(t=>pc.addTrack(t,voiceStream));
+  pc.ontrack=e=>addRemoteAudio(remoteUid,e.streams[0]);
+  pc.onconnectionstatechange=()=>{
+    if(['failed','closed','disconnected'].includes(pc.connectionState)){
+      if(pc.connectionState==='failed'){
+        try{pc.restartIce()}catch(_){ }
+      }
+    }
+  };
+  const signalRef=voicePath(pair);
+  const offerRef=ref(db,'rooms/'+onlineRoom+'/voice/'+pair+'/offer');
+  const answerRef=ref(db,'rooms/'+onlineRoom+'/voice/'+pair+'/answer');
+  const myCandidates=ref(db,'rooms/'+onlineRoom+'/voice/'+pair+'/candidates/'+uid);
+  const remoteCandidates=ref(db,'rooms/'+onlineRoom+'/voice/'+pair+'/candidates/'+remoteUid);
+  const unsubs=[];
+  pc.onicecandidate=async e=>{
+    if(e.candidate){
+      const key=ref(db,'rooms/'+onlineRoom+'/voice/'+pair+'/candidates/'+uid).key;
+      await set(ref(db,'rooms/'+onlineRoom+'/voice/'+pair+'/candidates/'+uid+'/'+key),e.candidate.toJSON()).catch(()=>{});
+    }
+  };
+  if(initiator){
+    const offer=await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await set(offerRef,{type:offer.type,sdp:offer.sdp,from:uid});
+  }else{
+    const snap=await get(offerRef);
+    const offer=snap.val();
+    if(offer && !pc.currentRemoteDescription){
+      await pc.setRemoteDescription(offer);
+      const answer=await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await set(answerRef,{type:answer.type,sdp:answer.sdp,from:uid});
+    }
+  }
+  const answerListener=onValue(answerRef,async snap=>{
+    const answer=snap.val();
+    if(!answer || answer.from===uid || pc.currentRemoteDescription)return;
+    if(pc.signalingState==='have-local-offer'){
+      try{await pc.setRemoteDescription(answer)}catch(e){console.warn('voice answer',e)}
+    }
+  });
+  const candidateListener=onValue(remoteCandidates,async snap=>{
+    const data=snap.val()||{};
+    for(const [key,c] of Object.entries(data)){
+      if(entry.seenCandidates.has(key))continue;
+      entry.seenCandidates.add(key);
+      try{await pc.addIceCandidate(new RTCIceCandidate(c))}catch(e){console.warn('voice candidate',e)}
+    }
+  });
+  unsubs.push(answerListener,candidateListener);
+  entry.unsubs=unsubs;
+  return pc;
+}
+
+async function connectVoicePeers(){
+  if(!voiceEnabled || !voiceStream || !onlineRoom || !uid)return;
+  const remotes=activeRemotePlayers();
+  for(const p of remotes){
+    if(!p.uid)continue;
+    const initiator=String(uid)<String(p.uid);
+    try{await createVoicePeer(p.uid,initiator)}catch(e){console.warn('voice peer',e)}
+  }
+  setVoiceStatus('Voice enabled • '+(remotes.length?'Connected/connecting':'Waiting for players'));
+}
+
+function cleanupVoice(){
+  for(const [remote,entry] of voicePeers){
+    try{entry.unsubs?.forEach(fn=>fn&&fn())}catch(_){ }
+    try{entry.pc?.close()}catch(_){ }
+    const audio=document.getElementById('voiceAudio_'+remote);
+    if(audio)audio.remove();
+  }
+  voicePeers.clear();
+  if(voiceStream){voiceStream.getTracks().forEach(t=>t.stop());voiceStream=null;}
+  voiceEnabled=false;
+  voiceBoundRoom=null;
+  const btn=document.getElementById('voiceBtn');
+  if(btn){btn.textContent='🎤 Enable Voice';btn.classList.remove('off');}
+  setVoiceStatus('Voice chat off');
+  ensureVoicePanel();
+}
+
+window.toggleVoice=async()=>{
+  if(!online || !onlineRoom){alert('Voice chat is available in Online rooms only.');return;}
+  if(voiceEnabled){cleanupVoice();return;}
+  if(!navigator.mediaDevices?.getUserMedia){alert('Your browser does not support microphone access.');return;}
+  try{
+    voiceStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
+    voiceEnabled=true;
+    voiceBoundRoom=onlineRoom;
+    const btn=document.getElementById('voiceBtn');
+    if(btn){btn.textContent='🔇 Disable Voice';btn.classList.add('off');}
+    setVoiceStatus('Starting voice chat…');
+    await connectVoicePeers();
+  }catch(e){
+    console.error(e);
+    voiceStream=null;
+    voiceEnabled=false;
+    alert('Microphone access was not allowed. Please allow microphone permission and try again.');
+  }
+};
+
+function refreshVoiceForPlayers(){
+  ensureVoicePanel();
+  if(voiceEnabled && voiceBoundRoom===onlineRoom)connectVoicePeers();
+}
+
+window.leaveRoom=async()=>{
+  cleanupVoice();
+  try{
+    if(gameUnsub){gameUnsub();gameUnsub=null;}
+    if(roomUnsub){roomUnsub();roomUnsub=null;}
+    if(onlineRoom&&uid){
+      await update(ref(db,'rooms/'+onlineRoom+'/players/'+uid),{connected:false});
+      if(onlineColor)await set(ref(db,'rooms/'+onlineRoom+'/colors/'+onlineColor),null);
+    }
+  }catch(e){console.error(e)}
+  online=false;onlineRoom=null;onlineColor=null;show('setupScreen');
+};
+
+</script>
+</body>
 </html>
