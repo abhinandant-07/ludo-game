@@ -2434,6 +2434,8 @@ let voiceBoundRoom=null;
 let voiceSessionId=null;
 let voiceMuted=false;
 let voiceChanging=false;
+let voiceAudioContext=null;
+const voiceAudioSources=new Map();
 
 function voicePair(a,b){return [a,b].sort().join('_')}
 function setVoiceStatus(text){const el=document.getElementById('voiceStatus');if(el)el.textContent=text}
@@ -2451,21 +2453,68 @@ function ensureVoicePanel(){
     updateVoicePlayerList();
   }
 }
+function removeRemoteAudio(peerUid){
+  const source=voiceAudioSources.get(peerUid);
+  if(source){
+    try{source.disconnect()}catch(_){}
+    voiceAudioSources.delete(peerUid);
+  }
+  const audio=document.getElementById('voiceAudio_'+peerUid);
+  if(audio){
+    try{audio.pause()}catch(_){}
+    audio.srcObject=null;
+    audio.remove();
+  }
+}
+
+async function unlockVoiceAudio(){
+  try{
+    if(!voiceAudioContext){
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if(AC)voiceAudioContext=new AC();
+    }
+    if(voiceAudioContext?.state==='suspended')await voiceAudioContext.resume();
+  }catch(e){console.warn('audio unlock',e)}
+}
+
 function addRemoteAudio(peerUid,stream){
+  removeRemoteAudio(peerUid);
+
+  /* Primary playback path: Web Audio. The AudioContext is resumed from the
+     Enable Voice button's user gesture, so remote speech is not lost to the
+     browser autoplay policy. */
+  try{
+    if(voiceAudioContext && voiceAudioContext.state!=='closed'){
+      const source=voiceAudioContext.createMediaStreamSource(stream);
+      const gain=voiceAudioContext.createGain();
+      gain.gain.value=1;
+      source.connect(gain);
+      gain.connect(voiceAudioContext.destination);
+      voiceAudioSources.set(peerUid,source);
+      return;
+    }
+  }catch(e){console.warn('Web Audio remote stream',e)}
+
+  /* Fallback for browsers where Web Audio is unavailable. */
   let audio=document.getElementById('voiceAudio_'+peerUid);
   if(!audio){
     audio=document.createElement('audio');
     audio.id='voiceAudio_'+peerUid;
     audio.autoplay=true;
     audio.playsInline=true;
+    audio.muted=false;
+    audio.volume=1;
     audio.setAttribute('playsinline','');
-    audio.style.display='none';
+    audio.setAttribute('autoplay','');
+    audio.style.position='fixed';
+    audio.style.width='1px';
+    audio.style.height='1px';
+    audio.style.opacity='0.01';
+    audio.style.pointerEvents='none';
     document.body.appendChild(audio);
   }
   audio.srcObject=stream;
-  const play=()=>audio.play().catch(()=>{});
-  play();
-  document.addEventListener('click',play,{once:true});
+  audio.play().catch(e=>console.warn('remote audio playback',e));
 }
 function voiceSignalRef(remoteUid){
   const pair=voicePair(uid,remoteUid);
@@ -2514,6 +2563,20 @@ async function createVoicePeer(remoteUid){
   voicePeers.set(remoteUid,entry);
   voiceStream.getTracks().forEach(t=>pc.addTrack(t,voiceStream));
   pc.ontrack=e=>{if(e.streams&&e.streams[0])addRemoteAudio(remoteUid,e.streams[0])};
+  pc.oniceconnectionstatechange=()=>{
+    updateVoicePlayerList();
+    if(pc.iceConnectionState==='failed'){
+      setVoiceStatus('Voice network failed — reconnecting…');
+      setTimeout(()=>{
+        if(voiceEnabled&&voiceStream&&onlineRoom&&voicePeers.get(remoteUid)?.pc===pc)connectVoicePeers();
+      },700);
+    }else if(pc.iceConnectionState==='disconnected'){
+      setTimeout(()=>{
+        if(voiceEnabled&&voiceStream&&onlineRoom&&voicePeers.get(remoteUid)?.pc===pc &&
+           pc.iceConnectionState==='disconnected')connectVoicePeers();
+      },1800);
+    }
+  };
   pc.onconnectionstatechange=()=>{
     updateVoicePlayerList();
     if(pc.connectionState==='connected')setVoiceStatus('Voice connected');
@@ -2583,7 +2646,7 @@ async function connectVoicePeers(){
     if(!wanted.has(remote)){
       try{entry.unsubs?.forEach(fn=>fn&&fn())}catch(_){ }
       try{entry.pc?.close()}catch(_){ }
-      const audio=document.getElementById('voiceAudio_'+remote);if(audio)audio.remove();
+      removeRemoteAudio(remote);
       voicePeers.delete(remote);
     }
   }
@@ -2635,9 +2698,15 @@ async function cleanupVoice(){
   for(const [remote,entry] of voicePeers){
     try{entry.unsubs?.forEach(fn=>fn&&fn())}catch(_){ }
     try{entry.pc?.close()}catch(_){ }
-    const audio=document.getElementById('voiceAudio_'+remote);if(audio)audio.remove();
+    removeRemoteAudio(remote);
   }
   voicePeers.clear();
+  for(const source of voiceAudioSources.values()){try{source.disconnect()}catch(_){}}
+  voiceAudioSources.clear();
+  if(voiceAudioContext){
+    try{await voiceAudioContext.close()}catch(_){}
+    voiceAudioContext=null;
+  }
   if(voiceStream){voiceStream.getTracks().forEach(t=>t.stop());voiceStream=null;}
   voiceBoundRoom=null;voiceSessionId=null;
   const btn=document.getElementById('voiceBtn');if(btn){btn.textContent='🎤 Enable Voice';btn.classList.remove('off')}
@@ -2657,6 +2726,7 @@ async function cleanupVoice(){
     const session=Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);
     voiceSessionId=session;
     voiceStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
+    await unlockVoiceAudio();
     if(room!==onlineRoom){throw new Error('The online room changed.');}
     voiceEnabled=true;voiceMuted=false;voiceBoundRoom=room;
     await setLocalVoiceState(true,false,session);
@@ -2665,11 +2735,14 @@ async function cleanupVoice(){
     await onDisconnect(ref(db,'rooms/'+room+'/players/'+uid)).update({voiceEnabled:false,muted:false,voiceSessionId:null});
     const btn=document.getElementById('voiceBtn');if(btn){btn.textContent='🔇 Disable Voice';btn.classList.add('off')}
     setVoiceStatus('Starting voice chat…');
-    voiceChanging=false;
     await connectVoicePeers();
+    voiceChanging=false;
   }catch(e){
     console.error(e);
     if(voiceStream){voiceStream.getTracks().forEach(t=>t.stop());voiceStream=null;}
+    for(const source of voiceAudioSources.values()){try{source.disconnect()}catch(_){}}
+    voiceAudioSources.clear();
+    if(voiceAudioContext){try{await voiceAudioContext.close()}catch(_){} voiceAudioContext=null;}
     voiceEnabled=false;voiceMuted=false;voiceSessionId=null;
     try{await setLocalVoiceState(false,false,null)}catch(_){ }
     voiceChanging=false;
