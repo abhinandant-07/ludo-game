@@ -1491,31 +1491,31 @@ function tokenPosition(color, position, tokenIndex) {
         const homes = {
 
             red: [
-                [14.25,14.35],
-                [24.55,14.35],
-                [14.25,24.55],
-                [24.55,24.55]
+                [14.2578,14.4531],
+                [24.4141,14.4531],
+                [14.2578,24.8047],
+                [24.4141,24.8047]
             ],
 
             green: [
-                [14.25,75.25],
-                [24.55,75.25],
-                [14.25,85.45],
-                [24.55,85.45]
+                [14.2578,75.3906],
+                [24.4141,75.3906],
+                [14.2578,85.5469],
+                [24.4141,85.5469]
             ],
 
             blue: [
-                [75.25,14.35],
-                [85.45,14.35],
-                [75.25,24.55],
-                [85.45,24.55]
+                [75.0000,14.4531],
+                [85.3516,14.4531],
+                [75.0000,24.8047],
+                [85.3516,24.8047]
             ],
 
             yellow: [
-                [75.25,75.25],
-                [85.45,75.25],
-                [75.25,85.45],
-                [85.45,85.45]
+                [75.0000,75.3906],
+                [85.3516,75.3906],
+                [75.0000,85.5469],
+                [85.3516,85.5469]
             ],
 
             /* Purple/orange are never placed in the center.
@@ -2480,32 +2480,57 @@ async function createVoicePeer(remoteUid){
   if(!voiceStream||!onlineRoom||!uid||!remoteUid)return;
   const remote=players.find(p=>p.uid===remoteUid);
   if(!remote||remote.voiceEnabled!==true)return;
-  const existing=voicePeers.get(remoteUid);
-  if(existing?.pc)return existing.pc;
+
   const initiator=String(uid)<String(remoteUid);
   const signal=voiceSignalRef(remoteUid);
   if(!signal)return;
   const signalRef=signal.ref, signalPath=signal.path;
+  const remoteSession=remote.voiceSessionId||'';
+  const sessionKey=signalPath;
+
+  const existing=voicePeers.get(remoteUid);
+  if(existing?.pc){
+    /* If the other player disabled/re-enabled Voice, their signaling session
+       changed. The old RTCPeerConnection must be destroyed and rebuilt. */
+    if(existing.signalPath===sessionKey &&
+       existing.remoteSession===remoteSession &&
+       existing.localSession===voiceSessionId &&
+       existing.pc.connectionState!=='failed' &&
+       existing.pc.connectionState!=='closed'){
+      return existing.pc;
+    }
+    try{existing.unsubs?.forEach(fn=>fn&&fn())}catch(_){ }
+    try{existing.pc.close()}catch(_){ }
+    const oldAudio=document.getElementById('voiceAudio_'+remoteUid);
+    if(oldAudio)oldAudio.remove();
+    voicePeers.delete(remoteUid);
+  }
+
   const pc=new RTCPeerConnection({iceServers:[
     {urls:'stun:stun.l.google.com:19302'},
     {urls:'stun:stun1.l.google.com:19302'}
   ]});
-  const entry={pc,remoteUid,queue:[],seen:new Set()};
+  const entry={pc,remoteUid,queue:[],seen:new Set(),signalPath:sessionKey,remoteSession,localSession:voiceSessionId};
   voicePeers.set(remoteUid,entry);
   voiceStream.getTracks().forEach(t=>pc.addTrack(t,voiceStream));
   pc.ontrack=e=>{if(e.streams&&e.streams[0])addRemoteAudio(remoteUid,e.streams[0])};
   pc.onconnectionstatechange=()=>{
     updateVoicePlayerList();
     if(pc.connectionState==='connected')setVoiceStatus('Voice connected');
-    else if(pc.connectionState==='connecting')setVoiceStatus('Connecting voice…');
+    else if(pc.connectionState==='connecting'||pc.connectionState==='new')setVoiceStatus('Connecting voice…');
     else if(pc.connectionState==='failed'){
       setVoiceStatus('Voice connection failed — retrying…');
-      try{pc.restartIce()}catch(_){ }
+      /* connectVoicePeers() will see the failed state and create a fresh peer. */
+      setTimeout(()=>{
+        if(voiceEnabled&&voiceStream&&onlineRoom&&voicePeers.get(remoteUid)?.pc===pc)connectVoicePeers();
+      },500);
+    }else if(pc.connectionState==='closed'){
+      if(voicePeers.get(remoteUid)?.pc===pc)voicePeers.delete(remoteUid);
+      updateVoicePlayerList();
     }
   };
   pc.onicecandidate=async e=>{
     if(!e.candidate)return;
-    /* push() gives every ICE candidate a unique key, so re-enable never overwrites old ICE. */
     const candidateRoot=ref(db,signalPath+'/candidates/'+uid);
     await set(push(candidateRoot),e.candidate.toJSON()).catch(()=>{});
   };
@@ -2550,7 +2575,6 @@ async function createVoicePeer(remoteUid){
   }
   return pc;
 }
-
 async function connectVoicePeers(){
   if(voiceChanging||!voiceEnabled||!voiceStream||!onlineRoom||!uid)return;
   const remotes=activeRemotePlayers();
