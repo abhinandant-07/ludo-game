@@ -423,6 +423,8 @@ Vertical path
 ===================================================== */
 
 .token {
+    pointer-events: auto;
+    touch-action: manipulation;
     position: absolute;
     width: 30px;
     height: 34px;
@@ -1683,19 +1685,22 @@ function renderTokens() {
                               !item.player.isComputer &&
                               !botThinking &&
                               !autoMovePending &&
+                              !rolling &&
                               !awaitingRoll &&
-                              moveChoiceOpen &&
+                              (moveChoiceOpen || online) &&
                               !(window.computerMode && players[currentPlayer] && players[currentPlayer].isComputer);
 
             if (humanTurn && canMove(item.player, item.position, item.tokenIndex)) {
                 token.classList.add("movable");
             }
 
-            token.onclick = function(event) {
-                event.stopPropagation();
+            const activateToken = function(event) {
+                if (event) event.stopPropagation();
                 if (!humanTurn) return;
                 moveToken(item.playerIndex, item.tokenIndex);
             };
+            token.onclick = activateToken;
+            token.onpointerup = activateToken;
 
             board.appendChild(token);
         });
@@ -2344,7 +2349,7 @@ window.rollDice=async()=>{
     awaitingRoll=false;
     moveChoiceOpen=true;
     setDice(diceValue);
-    setTimeout(()=>autoPass(diceValue),500);
+    const rolledForPass=diceValue; setTimeout(()=>autoPass(rolledForPass),700);
   }catch(e){
     console.error(e);
     alert('Online dice error: '+e.message);
@@ -2372,7 +2377,7 @@ async function autoPass(v){
 window.moveToken=async(playerIndex,tokenIndex)=>{
   if(window.computerMode){originalMoveToken(playerIndex,tokenIndex);return;}
   if(!online||!onlineRoom)return;
-  if(rolling||awaitingRoll||!moveChoiceOpen)return;
+  if(rolling)return;
   if(Number(playerIndex)!==Number(currentPlayer))return;
   try{
     const gameRef=ref(db,'rooms/'+onlineRoom+'/game');
@@ -2477,17 +2482,24 @@ async function createVoicePeer(remoteUid){
   if(!voiceStream||!onlineRoom||!uid||!remoteUid)return;
   const remote=players.find(p=>p.uid===remoteUid);
   if(!remote||remote.voiceEnabled!==true)return;
-  const existing=voicePeers.get(remoteUid);
-  if(existing?.pc)return existing.pc;
   const initiator=String(uid)<String(remoteUid);
   const signal=voiceSignalRef(remoteUid);
   if(!signal)return;
   const signalRef=signal.ref, signalPath=signal.path;
+  const existing=voicePeers.get(remoteUid);
+  if(existing?.pc){
+    if(existing.signalPath===signalPath)return existing.pc;
+    try{existing.unsubs?.forEach(fn=>fn&&fn())}catch(_){}
+    try{existing.pc.close()}catch(_){}
+    const oldAudio=document.getElementById('voiceAudio_'+remoteUid);
+    if(oldAudio)oldAudio.remove();
+    voicePeers.delete(remoteUid);
+  }
   const pc=new RTCPeerConnection({iceServers:[
     {urls:'stun:stun.l.google.com:19302'},
     {urls:'stun:stun1.l.google.com:19302'}
   ]});
-  const entry={pc,remoteUid,queue:[],seen:new Set()};
+  const entry={pc,remoteUid,queue:[],seen:new Set(),signalPath};
   voicePeers.set(remoteUid,entry);
   voiceStream.getTracks().forEach(t=>pc.addTrack(t,voiceStream));
   pc.ontrack=e=>{if(e.streams&&e.streams[0])addRemoteAudio(remoteUid,e.streams[0])};
@@ -2497,7 +2509,11 @@ async function createVoicePeer(remoteUid){
     else if(pc.connectionState==='connecting')setVoiceStatus('Connecting voice…');
     else if(pc.connectionState==='failed'){
       setVoiceStatus('Voice connection failed — retrying…');
-      try{pc.restartIce()}catch(_){ }
+      setTimeout(()=>{ if(voiceEnabled && voiceBoundRoom===onlineRoom) connectVoicePeers(); },300);
+    }
+    else if(pc.connectionState==='disconnected'){
+      setVoiceStatus('Voice disconnected — reconnecting…');
+      setTimeout(()=>{ if(voiceEnabled && voiceBoundRoom===onlineRoom) connectVoicePeers(); },500);
     }
   };
   pc.onicecandidate=async e=>{
