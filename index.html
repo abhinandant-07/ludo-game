@@ -424,15 +424,21 @@ Vertical path
 
 .token {
     position: absolute;
-    width: 30px;
-    height: 34px;
+    /* Responsive size keeps every token proportional to the board. */
+    width: clamp(20px, 3.75%, 30px);
+    height: clamp(23px, 4.25%, 34px);
     border-radius: 50% 50% 42% 42% / 42% 42% 58% 58%;
-    border: 3px solid white;
-    box-shadow: 0 5px 6px rgba(0,0,0,.38), inset 0 3px 0 rgba(255,255,255,.38);
+    border: clamp(2px, .38vw, 3px) solid white;
+    box-shadow: 0 4px 6px rgba(0,0,0,.34), inset 0 2px 0 rgba(255,255,255,.38);
     z-index: 50;
     cursor: pointer;
-    transform: translate(-50%, -50%);
-    transition: left .23s linear, top .23s linear, transform .23s;
+    transform: translate3d(-50%, -50%, 0) scale(1);
+    transform-origin: center center;
+    transition: left .18s cubic-bezier(.22,.61,.36,1),
+                top .18s cubic-bezier(.22,.61,.36,1),
+                transform .16s cubic-bezier(.22,.61,.36,1);
+    will-change: left, top, transform;
+    backface-visibility: hidden;
 }
 .token::before{
     content:"";
@@ -454,7 +460,7 @@ Vertical path
 }
 
 .token:hover {
-    transform: translate(-50%, -50%) scale(1.12);
+    transform: translate3d(-50%, -50%, 0) scale(1.08);
 }
 
 .token.red {
@@ -486,8 +492,23 @@ Vertical path
     z-index:200;
 }
 
-.token.stack2{width:22px;height:25px;}
-.token.stack3,.token.stack4{width:19px;height:22px;}
+/* Smooth movement state: no jump when a token is travelling between cells. */
+.token.moving {
+    z-index: 220;
+    pointer-events: none;
+    transition: left .16s cubic-bezier(.22,.61,.36,1),
+                top .16s cubic-bezier(.22,.61,.36,1),
+                transform .16s cubic-bezier(.22,.61,.36,1);
+}
+
+/* Base tokens are centered on the four printed home holes. */
+.token.home-token {
+    width: clamp(22px, 3.55%, 28px);
+    height: clamp(25px, 3.9%, 31px);
+}
+
+.token.stack2{width:clamp(17px,2.75%,22px);height:clamp(20px,3.15%,25px);}
+.token.stack3,.token.stack4{width:clamp(15px,2.4%,19px);height:clamp(18px,2.75%,22px);}
 @media(max-width:550px){
     .token.stack2{width:17px;height:20px;}
     .token.stack3,.token.stack4{width:15px;height:18px;}
@@ -495,11 +516,11 @@ Vertical path
 
 @keyframes pulse {
     from {
-        transform: translate(-50%, -50%) scale(1);
+        transform: translate3d(-50%, -50%, 0) scale(1);
     }
 
     to {
-        transform: translate(-50%, -50%) scale(1.16);
+        transform: translate3d(-50%, -50%, 0) scale(1.10);
     }
 }
 
@@ -741,6 +762,10 @@ Vertical path
     }
 }
 
+@media (prefers-reduced-motion: reduce){
+  .token,.token.moving,.token.movable{animation:none!important;transition:transform .08s linear,left .08s linear,top .08s linear!important;}
+}
+
 .modalScreen{display:none;position:fixed;inset:0;z-index:9999;min-height:100vh;align-items:center;justify-content:center;padding:20px;background:rgba(12,18,32,.96);overflow:auto}.wideBtn{width:100%;border:0;border-radius:14px;padding:15px;margin:7px 0;background:#34415a;color:#fff;font-size:17px;font-weight:bold;cursor:pointer}.wideBtn:hover{background:#465671}.roomInput{width:100%;padding:15px;border:0;border-radius:12px;text-align:center;font-size:22px;letter-spacing:5px;margin:10px 0;text-transform:uppercase}.roomCode{font-size:38px;font-weight:900;letter-spacing:8px;margin:12px 0}.lobbyBox{max-width:500px}.lobbyPlayer{display:flex;align-items:center;gap:10px;padding:9px;background:#29364d;border-radius:10px;margin:6px 0;text-align:left}.colorChoices{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 15px}.colorChoice{border:2px solid transparent;border-radius:12px;padding:11px;color:white;font-weight:bold;cursor:pointer}.colorChoice.taken{opacity:.28;cursor:not-allowed}.colorChoice.selected{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.25)}.colorChoice.red{background:#ef302b}.colorChoice.green{background:#38a900}.colorChoice.yellow{background:#c99800}.colorChoice.blue{background:#087bea}.colorChoice.purple{background:#8b3dcc}.colorChoice.orange{background:#ed7414}.computerBtn{grid-column:1 / 3!important;background:#6a4bc0!important}
 @media(max-width:550px){.colorChoices{grid-template-columns:repeat(2,1fr)}}
 
@@ -790,7 +815,8 @@ html,body{width:100%;min-width:0;overflow-x:hidden;}
   .sidePanel{padding:12px;}
   .dice{width:78px;height:78px;padding:11px;margin:8px auto 12px;}
   .dot{width:10px;height:10px;}
-  .token{width:20px;height:23px;}
+  .token{width:clamp(18px,3.75vw,22px);height:clamp(20px,4.25vw,25px);}
+  .token.home-token{width:clamp(18px,3.55vw,21px);height:clamp(20px,3.9vw,23px);}
   .token::before{width:11px;height:11px;top:3px;}
   .token::after{width:17px;height:5px;bottom:-5px;}
   .voicePanel{padding:8px;}
@@ -864,7 +890,7 @@ html,body{width:100%;min-width:0;overflow-x:hidden;}
     <div id="lobbyPlayers"></div>
     <h3>Choose your color</h3>
     <div id="colorChoices" class="colorChoices"></div>
-    <button id="startOnlineBtn" class="wideBtn" onclick="startOnlineGame()" disabled style="display:none">Start Game</button>
+    <button id="startOnlineBtn" class="wideBtn" onclick="startOnlineGame()" disabled>Start Game</button>
     <button class="backButton" onclick="leaveRoom()">Leave Room</button>
   </div>
 </div>
@@ -1668,23 +1694,30 @@ function renderTokens() {
         group.forEach((item, stackIndex) => {
             const token = document.createElement("div");
             token.className = "token " + item.player.color;
+            if (item.position === -1) token.classList.add("home-token");
             token.dataset.player = item.playerIndex;
             token.dataset.token = item.tokenIndex;
 
             const off = offsets[stackIndex] || [0,0];
             token.style.left = (item.pos.left + off[0]) + "%";
             token.style.top = (item.pos.top + off[1]) + "%";
+            token.style.pointerEvents = 'auto';
+            token.style.touchAction = 'manipulation';
 
             if (count === 2) token.classList.add("stack2");
             if (count === 3) token.classList.add("stack3");
             if (count >= 4) token.classList.add("stack4");
 
+            const onlineMovePhase = online && !window.computerMode &&
+                                   players[currentPlayer]?.uid === uid &&
+                                   !awaitingRoll &&
+                                   Number.isInteger(Number(diceValue)) && Number(diceValue)>=1 && Number(diceValue)<=6;
+            const localMovePhase = !online && !awaitingRoll && moveChoiceOpen;
             const humanTurn = item.playerIndex === currentPlayer &&
                               !item.player.isComputer &&
                               !botThinking &&
                               !autoMovePending &&
-                              !awaitingRoll &&
-                              moveChoiceOpen &&
+                              (onlineMovePhase || localMovePhase) &&
                               !(window.computerMode && players[currentPlayer] && players[currentPlayer].isComputer);
 
             if (humanTurn && canMove(item.player, item.position, item.tokenIndex)) {
@@ -1738,7 +1771,7 @@ function animateTokenMove(playerIndex, tokenIndex, fromPos, toPos) {
             token.style.left = pos.left + '%';
             token.style.top = pos.top + '%';
             n++;
-            setTimeout(run, 260);
+            setTimeout(run, 175);
         };
         run();
     });
@@ -2142,7 +2175,7 @@ const firebaseConfig={
 };
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getDatabase(app);
 window.computerMode=false;
-let uid=null,online=false,onlineRoom=null,onlineMax=2,onlineColor=null,roomUnsub=null,gameUnsub=null,roomVoiceUnsub=null,roomPlayerStates={},originalStartGame=window.startGame,originalRollDice=window.rollDice,originalMoveToken=window.moveToken;
+let uid=null,online=false,onlineRoom=null,onlineMax=2,onlineColor=null,roomUnsub=null,gameUnsub=null,roomVoiceUnsub=null,roomPlayerStates={};
 let authReady=new Promise(resolve=>onAuthStateChanged(auth,user=>{uid=user?user.uid:null;resolve(uid);}));
 
 function show(id){document.querySelectorAll('.modalScreen').forEach(x=>x.style.display='none');document.getElementById(id).style.display='flex'}
@@ -2215,7 +2248,7 @@ function renderLobby(r){
   const me=r.players?.[uid];
   onlineColor=me?.color||null;
   const startBtn=document.getElementById('startOnlineBtn');
-  const isHost=(r.hostId===uid);
+  const isHost=r.hostId===uid;
   startBtn.style.display=isHost?'block':'none';
   startBtn.disabled=!(isHost&&alive.length>=2&&onlineColor);
 }
@@ -2322,7 +2355,7 @@ function startSyncedGame(r){
 }
 
 window.rollDice=async()=>{
-  if(window.computerMode){originalRollDice();return;}
+  if(window.computerMode){rollDice();return;}
   if(!online||!onlineRoom)return;
   if(rolling)return;
   // NEVER animate or change the dice unless this device owns the current turn.
@@ -2373,27 +2406,32 @@ async function autoPass(v){
 }
 
 window.moveToken=async(playerIndex,tokenIndex)=>{
-  if(window.computerMode){originalMoveToken(playerIndex,tokenIndex);return;}
+  if(window.computerMode){ moveToken(playerIndex,tokenIndex); return; }
   if(!online||!onlineRoom)return;
-  if(rolling||awaitingRoll||!moveChoiceOpen)return;
-  if(Number(playerIndex)!==Number(currentPlayer))return;
+
+  /* IMPORTANT: Firebase is the authority. Do not reject a valid click
+     because this browser's local awaitingRoll/moveChoiceOpen flags are a
+     fraction of a second behind the remote game listener. */
   try{
     const gameRef=ref(db,'rooms/'+onlineRoom+'/game');
     const tx=await runTransaction(gameRef,g=>{
       if(!g||g.phase!=='move')return;
       const cp=Number(g.currentPlayer);
       if(cp!==Number(playerIndex))return;
-      if(g.players?.[cp]?.uid!==uid)return;
+      const current=g.players?.[cp];
+      if(!current||current.uid!==uid)return;
+
       const p=g.players[playerIndex];
-      if(!p)return;
       const v=Number(g.diceValue);
       const pos0=Number(p.tokens?.[tokenIndex]);
       if(!Number.isFinite(pos0)||pos0>=57)return;
       if(pos0===-1 && v!==6)return;
       if(pos0!==-1 && pos0+v>57)return;
+
       const pos=pos0===-1?0:pos0+v;
       const arr=g.players.map(x=>({...x,tokens:[...(x.tokens||[-1,-1,-1,-1])]}));
       arr[playerIndex].tokens[tokenIndex]=pos;
+
       let captured=false;
       const actual=((START[p.color]||0)+pos)%52;
       if(pos>=0&&pos<52&&!SAFE.includes(actual)){
@@ -2408,11 +2446,13 @@ window.moveToken=async(playerIndex,tokenIndex)=>{
           }
         }
       }
+
       const won=arr[playerIndex].tokens.every(x=>Number(x)>=57);
       const extra=shouldGrantExtraTurn(v,captured,pos);
-      const nextPlayerIndex=extra?cp:(cp+1)%arr.length;
-      return {...g,players:arr,currentPlayer:nextPlayerIndex,diceValue:1,phase:'roll',winner:won?p.uid:null};
+      const next=extra?cp:(cp+1)%arr.length;
+      return {...g,players:arr,currentPlayer:next,diceValue:1,phase:'roll',winner:won?uid:null};
     });
+
     if(tx.committed){
       moveChoiceOpen=false;
       awaitingRoll=true;
@@ -2490,7 +2530,7 @@ async function createVoicePeer(remoteUid){
     {urls:'stun:stun.l.google.com:19302'},
     {urls:'stun:stun1.l.google.com:19302'}
   ]});
-  const entry={pc,remoteUid,queue:[],seen:new Set()};
+  const entry={pc,remoteUid,queue:[],seen:new Set(),signalPath,remoteSession:remote.voiceSessionId||null,localSession:voiceSessionId};
   voicePeers.set(remoteUid,entry);
   voiceStream.getTracks().forEach(t=>pc.addTrack(t,voiceStream));
   pc.ontrack=e=>{if(e.streams&&e.streams[0])addRemoteAudio(remoteUid,e.streams[0])};
@@ -2546,7 +2586,7 @@ async function createVoicePeer(remoteUid){
   if(initiator){
     const offer=await pc.createOffer();
     await pc.setLocalDescription(offer);
-    await set(ref(db,signalPath+'/offer'),{type:offer.type,sdp:offer.sdp,session:voiceSessionId,from:uid});
+    await set(ref(db,signalPath+'/offer'),{type:offer.type,sdp:offer.sdp,session:initiator?voiceSessionId:remote.voiceSessionId,from:uid});
   }
   return pc;
 }
@@ -2563,7 +2603,22 @@ async function connectVoicePeers(){
       voicePeers.delete(remote);
     }
   }
-  for(const p of remotes){try{await createVoicePeer(p.uid)}catch(e){console.warn('voice peer',e)}}
+  for(const p of remotes){
+    try{
+      const desired=voiceSignalRef(p.uid);
+      const existing=voicePeers.get(p.uid);
+      const desiredPath=desired?.path||'';
+      const desiredRemoteSession=p.voiceSessionId||null;
+      const desiredLocalSession=voiceSessionId||null;
+      if(existing && (existing.signalPath!==desiredPath || existing.remoteSession!==desiredRemoteSession || existing.localSession!==desiredLocalSession)){
+        try{existing.unsubs?.forEach(fn=>fn&&fn())}catch(_){ }
+        try{existing.pc?.close()}catch(_){ }
+        const audio=document.getElementById('voiceAudio_'+p.uid);if(audio)audio.remove();
+        voicePeers.delete(p.uid);
+      }
+      await createVoicePeer(p.uid);
+    }catch(e){console.warn('voice peer',e)}
+  }
   const connected=[...voicePeers.values()].filter(e=>e.pc?.connectionState==='connected').length;
   setVoiceStatus(remotes.length?(connected+'/'+remotes.length+' voice connection'+(remotes.length===1?'':'s')):'Waiting for other players to enable voice');
   updateVoicePlayerList();
