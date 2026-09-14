@@ -2443,6 +2443,9 @@ const voiceAudioNodes=new Map();
 
 function voicePair(a,b){return [String(a),String(b)].sort().join('_')}
 function setVoiceStatus(text){const el=document.getElementById('voiceStatus');if(el)el.textContent=text}
+document.addEventListener('pointerdown',()=>{
+  if(voiceEnabled)unlockVoiceAudio();
+},{passive:true});
 function activeRemotePlayers(){return (players||[]).filter(p=>p&&p.uid&&p.uid!==uid&&p.voiceEnabled===true&&p.connected!==false)}
 function ensureVoicePanel(){
   const panel=document.getElementById('voicePanel');
@@ -2531,15 +2534,40 @@ async function createVoicePeer(remoteUid,force=false){
   if(existing)await destroyVoicePeer(remoteUid);
 
   const initiator=info.initiatorUid===String(uid);
+  /*
+    ICE configuration:
+    - STUN gives the fastest direct path.
+    - TURN is a relay fallback when the two devices are on restrictive/mobile networks.
+    - The public TURN entries are a testing fallback; use your own TURN credentials for production.
+  */
   const pc=new RTCPeerConnection({
     iceServers:[
       {urls:'stun:stun.l.google.com:19302'},
       {urls:'stun:stun1.l.google.com:19302'},
       {urls:'stun:stun2.l.google.com:19302'},
-      {urls:'stun:stun.cloudflare.com:3478'}
+      {urls:'stun:stun3.l.google.com:19302'},
+      {urls:'stun:stun4.l.google.com:19302'},
+      {urls:'stun:stun.cloudflare.com:3478'},
+      {
+        urls:'turn:openrelay.metered.ca:80',
+        username:'openrelayproject',
+        credential:'openrelayproject'
+      },
+      {
+        urls:'turn:openrelay.metered.ca:443',
+        username:'openrelayproject',
+        credential:'openrelayproject'
+      },
+      {
+        urls:'turn:openrelay.metered.ca:443?transport=tcp',
+        username:'openrelayproject',
+        credential:'openrelayproject'
+      }
     ],
+    iceTransportPolicy:'all',
     iceCandidatePoolSize:10,
-    bundlePolicy:'max-bundle'
+    bundlePolicy:'max-bundle',
+    rtcpMuxPolicy:'require'
   });
   const entry={pc,remoteUid,signalKey:info.key,queue:[],seen:new Set(),unsubs:[],reconnectTimer:null};
   voicePeers.set(remoteUid,entry);
@@ -2562,9 +2590,13 @@ async function createVoicePeer(remoteUid,force=false){
   pc.onconnectionstatechange=()=>{
     const st=pc.connectionState;
     updateVoicePlayerList();
-    if(st==='connected')setVoiceStatus('Voice connected');
-    else if(st==='connecting'||st==='new')setVoiceStatus('Connecting voice…');
-    else if(st==='failed'||st==='disconnected')rebuild();
+    const total=activeRemotePlayers().length;
+    const connected=[...voicePeers.values()].filter(e=>e.pc?.connectionState==='connected').length;
+    if(st==='connected'){
+      setVoiceStatus(total>0 && connected===total ? 'Voice connected' : 'Voice connected • '+connected+'/'+total);
+    }else if(st==='connecting'||st==='new'){
+      setVoiceStatus('Connecting voice… '+connected+'/'+total);
+    }else if(st==='failed'||st==='disconnected')rebuild();
   };
   pc.oniceconnectionstatechange=()=>{
     const st=pc.iceConnectionState;
