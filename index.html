@@ -2519,54 +2519,50 @@ async function addRemoteAudio(peerUid,stream){
   if(!tracks.length)return false;
   tracks.forEach(t=>{t.enabled=true});
 
-  /* AUDIO-ONLY FIX: do not touch game/token handlers. On desktop Chrome,
-     route the remote microphone through the already-unlocked AudioContext;
-     on phones keep the direct HTML audio path that is already working. */
-  const isDesktop=/Windows|Macintosh|Linux/i.test(navigator.userAgent)&&!(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
-  if(isDesktop){
-    try{
-      await unlockVoiceAudio();
-      if(voiceAudioContext&&voiceAudioContext.state!=='closed'){
-        if(voiceAudioContext.state!=='running')await voiceAudioContext.resume();
-        const old=voiceAudioNodes.get(peerUid);
-        if(old){try{old.source.disconnect()}catch(_){} try{old.gain.disconnect()}catch(_){} }
-        const source=voiceAudioContext.createMediaStreamSource(stream);
-        const gain=voiceAudioContext.createGain();
-        gain.gain.setValueAtTime(1,voiceAudioContext.currentTime);
-        source.connect(gain);
-        gain.connect(voiceAudioContext.destination);
-        voiceAudioNodes.set(peerUid,{source,gain,stream});
-        return true;
-      }
-    }catch(e){console.warn('Desktop remote voice output',e)}
-  }
-
+  /* VOICE-ONLY PATCH: keep the game completely untouched. Use both a real
+     audio element and Web Audio as controlled fallbacks. The element is
+     created during Enable Voice; Web Audio is unlocked there as well. */
+  const audio=prepareRemoteAudio(peerUid);
   try{
-    const audio=prepareRemoteAudio(peerUid);
     audio.muted=false;
     audio.volume=1;
     audio.srcObject=stream;
-    const result=audio.play();
-    if(result?.catch)await result.catch(e=>console.warn('Remote audio play',e));
-    return true;
-  }catch(e){console.warn('Remote HTML audio output',e)}
+    if(typeof audio.setSinkId==='function'){
+      try{await audio.setSinkId('default')}catch(_){ }
+    }
+    const playResult=audio.play();
+    if(playResult?.catch)await playResult.catch(err=>console.warn('remote audio play',err));
+  }catch(e){
+    console.warn('Remote audio element output',e);
+  }
 
-  /* Final fallback for desktop if the media element is blocked. */
+  /* Desktop/Chrome fallback: route the same remote stream through the
+     unlocked AudioContext. If this succeeds, mute the element to avoid
+     double playback; otherwise the normal <audio> path remains active. */
   try{
-    await unlockVoiceAudio();
-    if(voiceAudioContext&&voiceAudioContext.state!=='closed'){
-      if(voiceAudioContext.state!=='running')await voiceAudioContext.resume();
+    const ok=await unlockVoiceAudio();
+    if(ok&&voiceAudioContext&&voiceAudioContext.state==='running'){
+      if(typeof voiceAudioContext.setSinkId==='function'){
+        try{await voiceAudioContext.setSinkId('default')}catch(_){ }
+      }
+      const old=voiceAudioNodes.get(peerUid);
+      if(old){try{old.source.disconnect()}catch(_){} try{old.gain.disconnect()}catch(_){} }
       const source=voiceAudioContext.createMediaStreamSource(stream);
       const gain=voiceAudioContext.createGain();
-      gain.gain.value=1;
-      source.connect(gain).connect(voiceAudioContext.destination);
+      gain.gain.setValueAtTime(1,voiceAudioContext.currentTime);
+      source.connect(gain);
+      gain.connect(voiceAudioContext.destination);
       voiceAudioNodes.set(peerUid,{source,gain,stream});
+      audio.muted=true;
       return true;
     }
-  }catch(e){console.warn('Remote voice fallback',e)}
-  return false;
-}
+  }catch(e){
+    console.warn('Web Audio remote output',e);
+  }
 
+  audio.muted=false;
+  return true;
+}
 function voiceIceConfig(){
   return {
     iceServers:[
