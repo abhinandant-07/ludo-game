@@ -2435,7 +2435,7 @@ let voiceSessionId=null;
 let voiceMuted=false;
 let voiceChanging=false;
 let voiceAudioContext=null;
-const voiceAudioSources=new Map();
+const voiceAudioNodes=new Map();
 
 function voicePair(a,b){return [a,b].sort().join('_')}
 function setVoiceStatus(text){const el=document.getElementById('voiceStatus');if(el)el.textContent=text}
@@ -2453,11 +2453,21 @@ function ensureVoicePanel(){
     updateVoicePlayerList();
   }
 }
+async function unlockVoiceAudio(){
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC)return;
+    if(!voiceAudioContext||voiceAudioContext.state==='closed')voiceAudioContext=new AC();
+    if(voiceAudioContext.state==='suspended')await voiceAudioContext.resume();
+  }catch(e){console.warn('voice audio unlock',e)}
+}
+
 function removeRemoteAudio(peerUid){
-  const source=voiceAudioSources.get(peerUid);
-  if(source){
-    try{source.disconnect()}catch(_){}
-    voiceAudioSources.delete(peerUid);
+  const node=voiceAudioNodes.get(peerUid);
+  if(node){
+    try{node.source.disconnect()}catch(_){}
+    try{node.gain.disconnect()}catch(_){}
+    voiceAudioNodes.delete(peerUid);
   }
   const audio=document.getElementById('voiceAudio_'+peerUid);
   if(audio){
@@ -2467,54 +2477,41 @@ function removeRemoteAudio(peerUid){
   }
 }
 
-async function unlockVoiceAudio(){
-  try{
-    if(!voiceAudioContext){
-      const AC=window.AudioContext||window.webkitAudioContext;
-      if(AC)voiceAudioContext=new AC();
-    }
-    if(voiceAudioContext?.state==='suspended')await voiceAudioContext.resume();
-  }catch(e){console.warn('audio unlock',e)}
-}
-
 function addRemoteAudio(peerUid,stream){
   removeRemoteAudio(peerUid);
 
-  /* Primary playback path: Web Audio. The AudioContext is resumed from the
-     Enable Voice button's user gesture, so remote speech is not lost to the
-     browser autoplay policy. */
+  /* Web Audio is the primary path. The AudioContext is unlocked by the
+     Enable Voice button, avoiding silent remote audio caused by autoplay
+     restrictions. */
   try{
-    if(voiceAudioContext && voiceAudioContext.state!=='closed'){
+    if(voiceAudioContext&&voiceAudioContext.state!=='closed'){
       const source=voiceAudioContext.createMediaStreamSource(stream);
       const gain=voiceAudioContext.createGain();
       gain.gain.value=1;
       source.connect(gain);
       gain.connect(voiceAudioContext.destination);
-      voiceAudioSources.set(peerUid,source);
+      voiceAudioNodes.set(peerUid,{source,gain,stream});
+      if(voiceAudioContext.state==='suspended')voiceAudioContext.resume().catch(()=>{});
       return;
     }
-  }catch(e){console.warn('Web Audio remote stream',e)}
+  }catch(e){console.warn('WebAudio remote voice',e)}
 
-  /* Fallback for browsers where Web Audio is unavailable. */
-  let audio=document.getElementById('voiceAudio_'+peerUid);
-  if(!audio){
-    audio=document.createElement('audio');
-    audio.id='voiceAudio_'+peerUid;
-    audio.autoplay=true;
-    audio.playsInline=true;
-    audio.muted=false;
-    audio.volume=1;
-    audio.setAttribute('playsinline','');
-    audio.setAttribute('autoplay','');
-    audio.style.position='fixed';
-    audio.style.width='1px';
-    audio.style.height='1px';
-    audio.style.opacity='0.01';
-    audio.style.pointerEvents='none';
-    document.body.appendChild(audio);
-  }
+  /* Fallback for browsers without Web Audio. */
+  const audio=document.createElement('audio');
+  audio.id='voiceAudio_'+peerUid;
+  audio.autoplay=true;
+  audio.playsInline=true;
+  audio.muted=false;
+  audio.volume=1;
+  audio.setAttribute('autoplay','');
+  audio.setAttribute('playsinline','');
+  audio.style.position='fixed';
+  audio.style.left='-10000px';
+  audio.style.width='1px';
+  audio.style.height='1px';
+  document.body.appendChild(audio);
   audio.srcObject=stream;
-  audio.play().catch(e=>console.warn('remote audio playback',e));
+  audio.play().catch(e=>console.warn('remote audio play',e));
 }
 function voiceSignalRef(remoteUid){
   const pair=voicePair(uid,remoteUid);
@@ -2526,135 +2523,216 @@ function voiceSignalRef(remoteUid){
 }
 
 async function createVoicePeer(remoteUid){
-  if(!voiceStream||!onlineRoom||!uid||!remoteUid)return;
+  if(!voiceStream||!onlineRoom||!uid||!remoteUid)return null;
   const remote=players.find(p=>p.uid===remoteUid);
-  if(!remote||remote.voiceEnabled!==true)return;
+  if(!remote||remote.voiceEnabled!==true||!remote.voiceSessionId)return null;
 
   const initiator=String(uid)<String(remoteUid);
   const signal=voiceSignalRef(remoteUid);
-  if(!signal)return;
-  const signalRef=signal.ref, signalPath=signal.path;
-  const remoteSession=remote.voiceSessionId||'';
+  if(!signal)return null;
+
+  const signalRef=signal.ref;
+  const signalPath=signal.path;
+  const remoteSession=remote.voiceSessionId;
+  const localSession=voiceSessionId;
   const sessionKey=signalPath;
 
   const existing=voicePeers.get(remoteUid);
   if(existing?.pc){
-    /* If the other player disabled/re-enabled Voice, their signaling session
-       changed. The old RTCPeerConnection must be destroyed and rebuilt. */
-    if(existing.signalPath===sessionKey &&
-       existing.remoteSession===remoteSession &&
-       existing.localSession===voiceSessionId &&
-       existing.pc.connectionState!=='failed' &&
-       existing.pc.connectionState!=='closed'){
-      return existing.pc;
-    }
-    try{existing.unsubs?.forEach(fn=>fn&&fn())}catch(_){ }
-    try{existing.pc.close()}catch(_){ }
-    const oldAudio=document.getElementById('voiceAudio_'+remoteUid);
-    if(oldAudio)oldAudio.remove();
+    const sameSession=
+      existing.signalPath===sessionKey &&
+      existing.remoteSession===remoteSession &&
+      existing.localSession===localSession &&
+      existing.pc.connectionState!=='failed' &&
+      existing.pc.connectionState!=='closed';
+    if(sameSession)return existing.pc;
+
+    try{existing.unsubs?.forEach(fn=>fn&&fn())}catch(_){}
+    try{existing.pc.close()}catch(_){}
+    removeRemoteAudio(remoteUid);
     voicePeers.delete(remoteUid);
   }
 
-  const pc=new RTCPeerConnection({iceServers:[
-    {urls:'stun:stun.l.google.com:19302'},
-    {urls:'stun:stun1.l.google.com:19302'}
-  ]});
-  const entry={pc,remoteUid,queue:[],seen:new Set(),signalPath:sessionKey,remoteSession,localSession:voiceSessionId};
-  voicePeers.set(remoteUid,entry);
-  voiceStream.getTracks().forEach(t=>pc.addTrack(t,voiceStream));
-  pc.ontrack=e=>{if(e.streams&&e.streams[0])addRemoteAudio(remoteUid,e.streams[0])};
-  pc.oniceconnectionstatechange=()=>{
-    updateVoicePlayerList();
-    if(pc.iceConnectionState==='failed'){
-      setVoiceStatus('Voice network failed — reconnecting…');
-      setTimeout(()=>{
-        if(voiceEnabled&&voiceStream&&onlineRoom&&voicePeers.get(remoteUid)?.pc===pc)connectVoicePeers();
-      },700);
-    }else if(pc.iceConnectionState==='disconnected'){
-      setTimeout(()=>{
-        if(voiceEnabled&&voiceStream&&onlineRoom&&voicePeers.get(remoteUid)?.pc===pc &&
-           pc.iceConnectionState==='disconnected')connectVoicePeers();
-      },1800);
-    }
+  const pc=new RTCPeerConnection({
+    iceServers:[
+      {urls:'stun:stun.l.google.com:19302'},
+      {urls:'stun:stun1.l.google.com:19302'}
+    ],
+    iceCandidatePoolSize:10
+  });
+
+  const entry={
+    pc,remoteUid,queue:[],seen:new Set(),
+    signalPath:sessionKey,
+    remoteSession,
+    localSession
   };
+  voicePeers.set(remoteUid,entry);
+
+  voiceStream.getTracks().forEach(t=>pc.addTrack(t,voiceStream));
+
+  pc.ontrack=e=>{
+    const stream=e.streams?.[0];
+    if(stream)addRemoteAudio(remoteUid,stream);
+  };
+
+  let reconnectTimer=null;
+  const scheduleReconnect=()=>{
+    clearTimeout(reconnectTimer);
+    reconnectTimer=setTimeout(()=>{
+      if(
+        voiceEnabled&&voiceStream&&onlineRoom&&
+        voicePeers.get(remoteUid)?.pc===pc&&
+        (pc.connectionState==='failed'||pc.iceConnectionState==='failed'||
+         pc.iceConnectionState==='disconnected')
+      ){
+        connectVoicePeers();
+      }
+    },1200);
+  };
+
   pc.onconnectionstatechange=()=>{
     updateVoicePlayerList();
-    if(pc.connectionState==='connected')setVoiceStatus('Voice connected');
-    else if(pc.connectionState==='connecting'||pc.connectionState==='new')setVoiceStatus('Connecting voice…');
-    else if(pc.connectionState==='failed'){
-      setVoiceStatus('Voice connection failed — retrying…');
-      /* connectVoicePeers() will see the failed state and create a fresh peer. */
-      setTimeout(()=>{
-        if(voiceEnabled&&voiceStream&&onlineRoom&&voicePeers.get(remoteUid)?.pc===pc)connectVoicePeers();
-      },500);
+    if(pc.connectionState==='connected'){
+      setVoiceStatus('Voice connected');
+    }else if(pc.connectionState==='connecting'||pc.connectionState==='new'){
+      setVoiceStatus('Connecting voice…');
+    }else if(pc.connectionState==='failed'){
+      setVoiceStatus('Voice connection failed — reconnecting…');
+      scheduleReconnect();
     }else if(pc.connectionState==='closed'){
       if(voicePeers.get(remoteUid)?.pc===pc)voicePeers.delete(remoteUid);
+      removeRemoteAudio(remoteUid);
       updateVoicePlayerList();
     }
   };
+
+  pc.oniceconnectionstatechange=()=>{
+    updateVoicePlayerList();
+    if(pc.iceConnectionState==='failed'||pc.iceConnectionState==='disconnected'){
+      scheduleReconnect();
+    }
+  };
+
   pc.onicecandidate=async e=>{
     if(!e.candidate)return;
     const candidateRoot=ref(db,signalPath+'/candidates/'+uid);
-    await set(push(candidateRoot),e.candidate.toJSON()).catch(()=>{});
+    await set(push(candidateRoot),{
+      candidate:e.candidate.candidate,
+      sdpMid:e.candidate.sdpMid,
+      sdpMLineIndex:e.candidate.sdpMLineIndex,
+      usernameFragment:e.candidate.usernameFragment||null
+    }).catch(err=>console.warn('voice ICE write',err));
   };
-  const answerRef=ref(db,signalPath+'/answer');
-  const remoteUidCandidates=ref(db,signalPath+'/candidates/'+remoteUid);
+
   const offerListener=onValue(ref(db,signalPath+'/offer'),async snap=>{
     if(initiator)return;
     const offer=snap.val();
-    if(!offer||offer.session!==remote.voiceSessionId||pc.currentRemoteDescription)return;
+    if(!offer||offer.session!==remoteSession)return;
+    if(pc.currentRemoteDescription)return;
+
     try{
-      await pc.setRemoteDescription(new RTCSessionDescription({type:offer.type,sdp:offer.sdp}));
-      for(const c of entry.queue.splice(0))try{await pc.addIceCandidate(new RTCIceCandidate(c))}catch(_){ }
+      await pc.setRemoteDescription(new RTCSessionDescription({
+        type:offer.type,sdp:offer.sdp
+      }));
+      for(const c of entry.queue.splice(0)){
+        try{await pc.addIceCandidate(new RTCIceCandidate(c))}catch(_){}
+      }
       const answer=await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      await set(answerRef,{type:answer.type,sdp:answer.sdp,session:remote.voiceSessionId,from:uid});
+      await set(ref(db,signalPath+'/answer'),{
+        type:answer.type,
+        sdp:answer.sdp,
+        session:remoteSession,
+        from:uid
+      });
     }catch(e){console.warn('voice offer',e)}
   });
-  const answerListener=onValue(answerRef,async snap=>{
+
+  const answerListener=onValue(ref(db,signalPath+'/answer'),async snap=>{
     if(!initiator)return;
     const answer=snap.val();
-    if(!answer||answer.session!==voiceSessionId||pc.currentRemoteDescription)return;
+    if(!answer||answer.session!==localSession)return;
+    if(pc.currentRemoteDescription)return;
     if(pc.signalingState!=='have-local-offer')return;
+
     try{
-      await pc.setRemoteDescription(new RTCSessionDescription({type:answer.type,sdp:answer.sdp}));
-      for(const c of entry.queue.splice(0))try{await pc.addIceCandidate(new RTCIceCandidate(c))}catch(_){ }
+      await pc.setRemoteDescription(new RTCSessionDescription({
+        type:answer.type,sdp:answer.sdp
+      }));
+      for(const c of entry.queue.splice(0)){
+        try{await pc.addIceCandidate(new RTCIceCandidate(c))}catch(_){}
+      }
     }catch(e){console.warn('voice answer',e)}
   });
+
+  const remoteUidCandidates=ref(db,signalPath+'/candidates/'+remoteUid);
   const candidateListener=onValue(remoteUidCandidates,async snap=>{
     const data=snap.val()||{};
     for(const [key,c] of Object.entries(data)){
       if(entry.seen.has(key))continue;
       entry.seen.add(key);
-      if(!pc.remoteDescription){entry.queue.push(c);continue}
-      try{await pc.addIceCandidate(new RTCIceCandidate(c))}catch(e){console.warn('voice candidate',e)}
+      if(!pc.remoteDescription){
+        entry.queue.push(c);
+        continue;
+      }
+      try{await pc.addIceCandidate(new RTCIceCandidate(c))}catch(e){
+        console.warn('voice remote ICE',e);
+      }
     }
   });
+
   entry.unsubs=[offerListener,answerListener,candidateListener];
+
   if(initiator){
-    const offer=await pc.createOffer();
+    const offer=await pc.createOffer({
+      offerToReceiveAudio:true,
+      offerToReceiveVideo:false
+    });
     await pc.setLocalDescription(offer);
-    await set(ref(db,signalPath+'/offer'),{type:offer.type,sdp:offer.sdp,session:voiceSessionId,from:uid});
+    await set(ref(db,signalPath+'/offer'),{
+      type:offer.type,
+      sdp:offer.sdp,
+      session:localSession,
+      from:uid
+    });
   }
+
   return pc;
 }
+
 async function connectVoicePeers(){
   if(voiceChanging||!voiceEnabled||!voiceStream||!onlineRoom||!uid)return;
+
+  await unlockVoiceAudio();
+
   const remotes=activeRemotePlayers();
   const wanted=new Set(remotes.map(p=>p.uid));
-  for(const [remote,entry] of voicePeers){
+
+  for(const [remote,entry] of [...voicePeers]){
     if(!wanted.has(remote)){
-      try{entry.unsubs?.forEach(fn=>fn&&fn())}catch(_){ }
-      try{entry.pc?.close()}catch(_){ }
+      try{entry.unsubs?.forEach(fn=>fn&&fn())}catch(_){}
+      try{entry.pc?.close()}catch(_){}
       removeRemoteAudio(remote);
       voicePeers.delete(remote);
     }
   }
-  for(const p of remotes){try{await createVoicePeer(p.uid)}catch(e){console.warn('voice peer',e)}}
-  const connected=[...voicePeers.values()].filter(e=>e.pc?.connectionState==='connected').length;
-  setVoiceStatus(remotes.length?(connected+'/'+remotes.length+' voice connection'+(remotes.length===1?'':'s')):'Waiting for other players to enable voice');
+
+  for(const p of remotes){
+    try{await createVoicePeer(p.uid)}catch(e){console.warn('voice peer',e)}
+  }
+
+  const connected=[...voicePeers.values()]
+    .filter(e=>e.pc?.connectionState==='connected').length;
+
+  setVoiceStatus(
+    remotes.length
+      ? (connected+'/'+remotes.length+' voice connection'+(remotes.length===1?'':'s'))
+      : 'Waiting for other players to enable voice'
+  );
   updateVoicePlayerList();
 }
+
 async function setLocalVoiceState(enabled,muted,session){
   if(!onlineRoom||!uid)return;
   const data={voiceEnabled:!!enabled,muted:!!muted};
@@ -2689,68 +2767,168 @@ window.toggleMute=async()=>{
 };
 async function cleanupVoice(){
   voiceChanging=true;
-  /* Mark OFF before closing peers. The changing flag prevents the room listener
-     from immediately creating a new peer during the OFF -> cleanup transition. */
-  const room=onlineRoom,currentUid=uid;
+
+  const room=onlineRoom;
+  const currentUid=uid;
+
+  /* Tell everyone OFF before destroying local connections. */
   voiceEnabled=false;
   voiceMuted=false;
-  if(room&&currentUid){try{await update(ref(db,'rooms/'+room+'/players/'+currentUid),{voiceEnabled:false,muted:false,voiceSessionId:null})}catch(_){} }
-  for(const [remote,entry] of voicePeers){
-    try{entry.unsubs?.forEach(fn=>fn&&fn())}catch(_){ }
-    try{entry.pc?.close()}catch(_){ }
+
+  if(room&&currentUid){
+    try{
+      await update(ref(db,'rooms/'+room+'/players/'+currentUid),{
+        voiceEnabled:false,
+        muted:false,
+        voiceSessionId:null
+      });
+    }catch(_){}
+  }
+
+  for(const [remote,entry] of [...voicePeers]){
+    try{entry.unsubs?.forEach(fn=>fn&&fn())}catch(_){}
+    try{entry.pc?.close()}catch(_){}
     removeRemoteAudio(remote);
   }
   voicePeers.clear();
-  for(const source of voiceAudioSources.values()){try{source.disconnect()}catch(_){}}
-  voiceAudioSources.clear();
+
+  if(voiceStream){
+    voiceStream.getTracks().forEach(t=>{
+      try{t.stop()}catch(_){}
+    });
+    voiceStream=null;
+  }
+
   if(voiceAudioContext){
     try{await voiceAudioContext.close()}catch(_){}
     voiceAudioContext=null;
   }
-  if(voiceStream){voiceStream.getTracks().forEach(t=>t.stop());voiceStream=null;}
-  voiceBoundRoom=null;voiceSessionId=null;
-  const btn=document.getElementById('voiceBtn');if(btn){btn.textContent='🎤 Enable Voice';btn.classList.remove('off')}
+  voiceAudioNodes.clear();
+
+  voiceBoundRoom=null;
+  voiceSessionId=null;
+
+  const btn=document.getElementById('voiceBtn');
+  if(btn){
+    btn.textContent='🎤 Enable Voice';
+    btn.classList.remove('off');
+  }
+
   voiceChanging=false;
   setVoiceStatus('Voice chat off');
   ensureVoicePanel();
-}window.toggleVoice=async()=>{
-  if(!online||!onlineRoom){alert('Voice chat is available in Online rooms only.');return;}
+}
+
+window.toggleVoice=async()=>{
+  if(!online||!onlineRoom){
+    alert('Voice chat is available in Online rooms only.');
+    return;
+  }
   if(voiceChanging)return;
-  if(voiceEnabled){await cleanupVoice();return;}
-  if(!navigator.mediaDevices?.getUserMedia){alert('Your browser does not support microphone access.');return;}
+
+  if(voiceEnabled){
+    await cleanupVoice();
+    return;
+  }
+
+  if(!navigator.mediaDevices?.getUserMedia){
+    alert('Your browser does not support microphone access.');
+    return;
+  }
+
   voiceChanging=true;
+
   try{
-    /* Every enable gets a brand-new signaling session. Old offers/candidates
-       are never reused. */
     const room=onlineRoom;
-    const session=Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);
-    voiceSessionId=session;
-    voiceStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
+    const session=
+      Date.now().toString(36)+'_'+
+      Math.random().toString(36).slice(2);
+
+    /* Create/unlock playback in the same user gesture as the mic request. */
     await unlockVoiceAudio();
-    if(room!==onlineRoom){throw new Error('The online room changed.');}
-    voiceEnabled=true;voiceMuted=false;voiceBoundRoom=room;
+
+    voiceSessionId=session;
+
+    voiceStream=await navigator.mediaDevices.getUserMedia({
+      audio:{
+        echoCancellation:true,
+        noiseSuppression:true,
+        autoGainControl:true,
+        channelCount:1
+      },
+      video:false
+    });
+
+    if(room!==onlineRoom)throw new Error('The online room changed.');
+
+    voiceEnabled=true;
+    voiceMuted=false;
+    voiceBoundRoom=room;
+
     await setLocalVoiceState(true,false,session);
-    /* If this tab/browser disappears unexpectedly, mark voice OFF for the
-       other players instead of leaving a stale Unmuted status. */
-    await onDisconnect(ref(db,'rooms/'+room+'/players/'+uid)).update({voiceEnabled:false,muted:false,voiceSessionId:null});
-    const btn=document.getElementById('voiceBtn');if(btn){btn.textContent='🔇 Disable Voice';btn.classList.add('off')}
+
+    try{
+      await onDisconnect(ref(db,'rooms/'+room+'/players/'+uid)).update({
+        voiceEnabled:false,
+        muted:false,
+        voiceSessionId:null
+      });
+    }catch(_){}
+
+    const btn=document.getElementById('voiceBtn');
+    if(btn){
+      btn.textContent='🔇 Disable Voice';
+      btn.classList.add('off');
+    }
+
     setVoiceStatus('Starting voice chat…');
+
+    /* Do not clear voiceChanging until the first peer setup has completed.
+       This prevents the room listener from racing the initial connection. */
     await connectVoicePeers();
     voiceChanging=false;
   }catch(e){
-    console.error(e);
-    if(voiceStream){voiceStream.getTracks().forEach(t=>t.stop());voiceStream=null;}
-    for(const source of voiceAudioSources.values()){try{source.disconnect()}catch(_){}}
-    voiceAudioSources.clear();
-    if(voiceAudioContext){try{await voiceAudioContext.close()}catch(_){} voiceAudioContext=null;}
-    voiceEnabled=false;voiceMuted=false;voiceSessionId=null;
-    try{await setLocalVoiceState(false,false,null)}catch(_){ }
+    console.error('Voice start error',e);
+
+    if(voiceStream){
+      voiceStream.getTracks().forEach(t=>{try{t.stop()}catch(_){ }});
+      voiceStream=null;
+    }
+
+    for(const [remote,entry] of [...voicePeers]){
+      try{entry.unsubs?.forEach(fn=>fn&&fn())}catch(_){}
+      try{entry.pc?.close()}catch(_){}
+      removeRemoteAudio(remote);
+    }
+    voicePeers.clear();
+
+    if(voiceAudioContext){
+      try{await voiceAudioContext.close()}catch(_){}
+      voiceAudioContext=null;
+    }
+    voiceAudioNodes.clear();
+
+    voiceEnabled=false;
+    voiceMuted=false;
+    voiceSessionId=null;
+    try{await setLocalVoiceState(false,false,null)}catch(_){}
+
     voiceChanging=false;
-    const btn=document.getElementById('voiceBtn');if(btn){btn.textContent='🎤 Enable Voice';btn.classList.remove('off')}
+
+    const btn=document.getElementById('voiceBtn');
+    if(btn){
+      btn.textContent='🎤 Enable Voice';
+      btn.classList.remove('off');
+    }
+
     setVoiceStatus('Voice chat off');
-    alert('Microphone access was not allowed or voice could not start. Please allow microphone permission and try again.');
+
+    alert(
+      'Microphone/voice could not start. Allow microphone permission for this site and try Enable Voice again.'
+    );
   }
 };
+
 function refreshVoiceForPlayers(){
   ensureVoicePanel();
   updateVoicePlayerList();
