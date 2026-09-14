@@ -825,6 +825,8 @@ html,body{width:100%;min-width:0;overflow-x:hidden;}
       <button onclick="chooseOnline(2)">2 Players</button>
       <button onclick="chooseOnline(3)">3 Players</button>
       <button onclick="chooseOnline(4)">4 Players</button>
+      <button onclick="chooseOnline(5)">5 Players</button>
+      <button onclick="chooseOnline(6)">6 Players</button>
       <button class="computerBtn" onclick="chooseComputer()">🤖 Against Computer</button>
     </div>
     <div class="rules">Create a private room and share the code with friends.</div>
@@ -1142,14 +1144,27 @@ const START = {
    This removes any ambiguity from rotating the path during movement.
 */
 const COLOR_PATHS = {
-    // All playable colours use the SAME 52 unique outer-track cells.
-    // Each route is only rotated so that that colour's own start cell is
-    // position 0. This keeps movement, capture and finishing consistent.
+    // One shared 52-cell outer track. Each playable colour starts at
+    // its own start cell (position 0) and completes exactly one full
+    // revolution before entering its own coloured home lane.
     red: PATH.slice(0),
     green: PATH.slice(39).concat(PATH.slice(0,39)),
     yellow: PATH.slice(26).concat(PATH.slice(0,26)),
     blue: PATH.slice(13).concat(PATH.slice(0,13))
 };
+
+// Development-time validation: every playable route must contain exactly
+// the same 52 unique outer cells, and no home-lane cell may overlap them.
+(function validateBoardRoutes(){
+    const playable=['red','green','yellow','blue'];
+    const outerKeys=new Set(PATH.map(([r,c])=>r+','+c));
+    playable.forEach(color=>{
+        const route=COLOR_PATHS[color];
+        if(!route || route.length!==52) throw new Error(color+' route must have 52 cells');
+        if(new Set(route.map(([r,c])=>r+','+c)).size!==52) throw new Error(color+' route contains duplicate cells');
+        if(route[0][0]!==PATH[START[color]][0] || route[0][1]!==PATH[START[color]][1]) throw new Error(color+' route start is wrong');
+    });
+})();
 
 
 /* =====================================================
@@ -1178,7 +1193,7 @@ let moveChoiceOpen = false;
 
 function startGame(number) {
 
-    activePlayers = COLORS.slice(0, Math.min(Number(number)||2, 4));
+    activePlayers = COLORS.slice(0, number);
 
     players = activePlayers.map((color, index) => {
 
@@ -1475,7 +1490,13 @@ function getExactOuterRoute(color) {
     // Red starts on the left and moves RIGHT; green starts at the bottom
     // and moves UP, then LEFT, then UP, then RIGHT; yellow moves LEFT;
     // blue moves DOWN.
-    return COLOR_PATHS[color] || COLOR_PATHS.red;
+    const routes = {
+        red: COLOR_PATHS.red,
+        green: COLOR_PATHS.green,
+        yellow: COLOR_PATHS.yellow,
+        blue: COLOR_PATHS.blue
+    };
+    return routes[color] || routes.red;
 }
 
 function tokenPosition(color, position, tokenIndex) {
@@ -1593,8 +1614,9 @@ function tokenPosition(color, position, tokenIndex) {
     // Reaching position 57 completes the coin and is required for every
     // colour.
     const lane = {
-        // Five coloured cells (positions 52-56), then position 57 is the
-        // final winning cell.
+        // Five coloured cells (positions 52-56), then position 57 is
+        // the centre/final winning position. These cells must NOT overlap
+        // the 52-cell outer track.
         red: [
             [7,2],[7,3],[7,4],[7,5],[7,6]
         ],
@@ -2149,10 +2171,10 @@ let authReady=new Promise(resolve=>onAuthStateChanged(auth,user=>{uid=user?user.
 function show(id){document.querySelectorAll('.modalScreen').forEach(x=>x.style.display='none');document.getElementById(id).style.display='flex'}
 function hide(id){document.getElementById(id).style.display='none'}
 window.backHome=()=>{show('setupScreen');document.getElementById('setupScreen').style.display='flex'};
-window.chooseOnline=n=>{window.computerMode=false;onlineMax=Math.min(Number(n)||2,4);document.getElementById('modeTitle').textContent=`Online • ${n} Players`;show('modeScreen')};
+window.chooseOnline=n=>{window.computerMode=false;onlineMax=n;document.getElementById('modeTitle').textContent=`Online • ${n} Players`;show('modeScreen')};
 window.chooseComputer=()=>{
   window.computerMode=true;
-  const colors=['red','green','yellow','blue'];
+  const colors=['red','green','yellow','blue','purple','orange'];
   document.getElementById('computerColors').innerHTML=colors.map(c=>`<button class="colorChoice ${c}" onclick="startComputerGame('${c}')">${c[0].toUpperCase()+c.slice(1)}</button>`).join('');
   show('computerColorScreen');
 };
@@ -2162,7 +2184,7 @@ window.startComputerGame=(myColor)=>{
   onlineColor=null;
   window.computerMode=true;
   botThinking=false;
-  const colors=['red','green','yellow','blue'];
+  const colors=['red','green','yellow','blue','purple','orange'];
   const botColor=colors.find(c=>c!==myColor);
   activePlayers=[myColor,botColor];
   players=[
@@ -2224,11 +2246,10 @@ function renderLobby(r){
 function renderColors(r=null){
   const taken={};
   if(r) Object.values(r.players||{}).forEach(p=>{if(p.color)taken[p.color]=p.uid});
-  document.getElementById('colorChoices').innerHTML=['red','green','yellow','blue'].map(c=>`<button class="colorChoice ${c} ${taken[c]&&taken[c]!==uid?'taken':''} ${taken[c]===uid?'selected':''}" ${taken[c]&&taken[c]!==uid?'disabled':''} onclick="selectColor('${c}')">${c[0].toUpperCase()+c.slice(1)}${taken[c]===uid?' ✓':''}</button>`).join('')
+  document.getElementById('colorChoices').innerHTML=['red','green','yellow','blue','purple','orange'].map(c=>`<button class="colorChoice ${c} ${taken[c]&&taken[c]!==uid?'taken':''} ${taken[c]===uid?'selected':''}" ${taken[c]&&taken[c]!==uid?'disabled':''} onclick="selectColor('${c}')">${c[0].toUpperCase()+c.slice(1)}${taken[c]===uid?' ✓':''}</button>`).join('')
 }
 
 window.selectColor=async c=>{
-  if(!['red','green','yellow','blue'].includes(c)){alert('This board supports Red, Green, Yellow and Blue only.');return;}
   if(!onlineRoom||!uid)return;
   const tx=await runTransaction(ref(db,'rooms/'+onlineRoom+'/colors/'+c),cur=>cur==null?uid:(cur===uid?cur:cur));
   if(!tx.committed||tx.snapshot.val()!==uid){alert('That color is already taken.');return}
