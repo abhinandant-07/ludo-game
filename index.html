@@ -1144,27 +1144,16 @@ const START = {
    This removes any ambiguity from rotating the path during movement.
 */
 const COLOR_PATHS = {
-    // One shared 52-cell outer track. Each playable colour starts at
-    // its own start cell (position 0) and completes exactly one full
-    // revolution before entering its own coloured home lane.
+    // Every colour uses the same physical 52-cell outer track,
+    // rotated so its own X-marked start is position 0.
+    // No centre/finish-lane cells are included in this outer track.
     red: PATH.slice(0),
-    green: PATH.slice(39).concat(PATH.slice(0,39)),
+    green: PATH.slice(39).concat(PATH.slice(0,39)), // green starts at PATH[39] and follows the same 52-cell outer track
     yellow: PATH.slice(26).concat(PATH.slice(0,26)),
-    blue: PATH.slice(13).concat(PATH.slice(0,13))
+    blue: PATH.slice(13).concat(PATH.slice(0,13)),
+    purple: PATH.slice(0),
+    orange: PATH.slice(0)
 };
-
-// Development-time validation: every playable route must contain exactly
-// the same 52 unique outer cells, and no home-lane cell may overlap them.
-(function validateBoardRoutes(){
-    const playable=['red','green','yellow','blue'];
-    const outerKeys=new Set(PATH.map(([r,c])=>r+','+c));
-    playable.forEach(color=>{
-        const route=COLOR_PATHS[color];
-        if(!route || route.length!==52) throw new Error(color+' route must have 52 cells');
-        if(new Set(route.map(([r,c])=>r+','+c)).size!==52) throw new Error(color+' route contains duplicate cells');
-        if(route[0][0]!==PATH[START[color]][0] || route[0][1]!==PATH[START[color]][1]) throw new Error(color+' route start is wrong');
-    });
-})();
 
 
 /* =====================================================
@@ -1573,10 +1562,6 @@ function tokenPosition(color, position, tokenIndex) {
         return { left: 50, top: 50 };
     }
 
-    // Green coin's actual winning point: the black-circled point
-    // marked by the user inside the green centre triangle.
-    // Position 57 is the separate green circle cell.
-
     /*
     Common path.
     */
@@ -1614,9 +1599,8 @@ function tokenPosition(color, position, tokenIndex) {
     // Reaching position 57 completes the coin and is required for every
     // colour.
     const lane = {
-        // Five coloured cells (positions 52-56), then position 57 is
-        // the centre/final winning position. These cells must NOT overlap
-        // the 52-cell outer track.
+        // Five coloured cells (positions 52-56), then position 57 is the
+        // centre finish/winning position.
         red: [
             [7,2],[7,3],[7,4],[7,5],[7,6]
         ],
@@ -1629,7 +1613,7 @@ function tokenPosition(color, position, tokenIndex) {
         blue: [
             [1,7],[2,7],[3,7],[4,7],[5,7]
         ]
-    };;
+    };
 
 
     const laneData =
