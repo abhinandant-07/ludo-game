@@ -2432,6 +2432,7 @@ window.moveToken=async(playerIndex,tokenIndex)=>{
 /* =====================================================
    WEBRTC VOICE CHAT — ROBUST ONLINE MESH
    - Firebase is used only for signaling/state.
+   - Voice signaling writes stay under each player's own player node for Firebase-rule compatibility.
    - One deterministic initiator per pair.
    - A fresh signaling session is created every time voice starts.
    - Failed/stale peers are destroyed and rebuilt.
@@ -2513,7 +2514,7 @@ function voiceSignalInfo(remoteUid){
   const initiatorSession=initiatorUid===String(uid)?voiceSessionId:(remote.voiceSessionId||null);
   if(!initiatorSession)return null;
   const key=initiatorUid+'_'+initiatorSession;
-  const path='rooms/'+onlineRoom+'/voice/'+pair+'/'+key;
+  const path='rooms/'+onlineRoom+'/players/'+initiatorUid+'/voiceSignal/'+key;
   return {pair,key,path,ref:ref(db,path),initiatorUid,initiatorSession};
 }
 
@@ -2608,16 +2609,27 @@ async function createVoicePeer(remoteUid,force=false){
     const st=pc.iceConnectionState;
     if(st==='failed'||st==='disconnected')rebuild();
   };
+  /*
+    IMPORTANT:
+    Keep each signaling write inside that user's own /players/$uid node.
+    This avoids Firebase rules blocking the answer/candidate writes when
+    the room only allows a player to write to their own player record.
+  */
+  const localSignalPath='rooms/'+onlineRoom+'/players/'+uid+'/voiceSignal/'+info.key;
+  const remoteSignalPath='rooms/'+onlineRoom+'/players/'+remoteUid+'/voiceSignal/'+info.key;
+  const initiatorSignalPath='rooms/'+onlineRoom+'/players/'+info.initiatorUid+'/voiceSignal/'+info.key;
+  const answerSignalPath=initiator?remoteSignalPath:localSignalPath;
+
   pc.onicecandidate=async e=>{
     if(!e.candidate||voicePeers.get(remoteUid)!==entry)return;
     try{
-      await set(push(ref(db,info.path+'/candidates/'+uid)),e.candidate.toJSON());
+      await set(push(ref(db,localSignalPath+'/candidates/'+uid)),e.candidate.toJSON());
     }catch(err){console.warn('voice ICE write',err)}
   };
 
-  const offerRef=ref(db,info.path+'/offer');
-  const answerRef=ref(db,info.path+'/answer');
-  const remoteCandidatesRef=ref(db,info.path+'/candidates/'+remoteUid);
+  const offerRef=ref(db,initiatorSignalPath+'/offer');
+  const answerRef=ref(db,answerSignalPath+'/answer');
+  const remoteCandidatesRef=ref(db,remoteSignalPath+'/candidates/'+remoteUid);
 
   const addCandidate=async c=>{
     if(!c||voicePeers.get(remoteUid)!==entry)return;
