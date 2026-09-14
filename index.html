@@ -1336,9 +1336,14 @@ function setDice(value) {
 
     const dice =
         document.getElementById("dice");
+    if (!dice) return;
 
-    dice.className =
-        "dice show" + value;
+    // Preserve the rolling animation while the visual face changes.
+    // The old code replaced className on every frame, which removed
+    // the .rolling class after the first visual update.
+    const wasRolling = dice.classList.contains("rolling");
+    dice.className = "dice show" + value;
+    if (wasRolling) dice.classList.add("rolling");
 
 }
 
