@@ -2487,7 +2487,9 @@ function prepareRemoteAudio(peerUid){
   audio.playsInline=true;
   audio.setAttribute('autoplay','');
   audio.setAttribute('playsinline','');
-  audio.muted=false;
+  /* WebAudio is the primary desktop/mobile output. Keep this element as a
+     fallback only, otherwise Chrome can produce a duplicate/blocked stream. */
+  audio.muted=true;
   audio.volume=1;
   audio.style.position='fixed';
   audio.style.left='-10000px';
@@ -2515,36 +2517,53 @@ function removeRemoteAudio(peerUid){
 
 async function addRemoteAudio(peerUid,stream){
   if(!stream)return false;
-  /* Use a real <audio> element as the primary output path. This is much more
-     reliable for remote WebRTC microphone audio on Chrome/Android/iOS than
-     routing a newly-created MediaStreamSource through Web Audio after the
-     user gesture has finished. */
-  const audio=prepareRemoteAudio(peerUid);
-  try{
-    audio.muted=false;
-    audio.volume=1;
-    audio.srcObject=stream;
-    const playResult=audio.play();
-    if(playResult?.catch)await playResult.catch(err=>console.warn('remote audio play',err));
-    const tracks=stream.getAudioTracks();
-    console.log('Remote voice audio attached',peerUid,{tracks:tracks.length,enabled:tracks.map(t=>t.enabled),muted:tracks.map(t=>t.muted),readyState:tracks.map(t=>t.readyState)});
-    return true;
-  }catch(e){
-    console.warn('Remote audio element failed',e);
-  }
-  /* Web Audio fallback only if the audio element cannot be used. */
+  const tracks=stream.getAudioTracks().filter(t=>t.readyState!=='ended');
+  if(!tracks.length){console.warn('Remote voice stream has no live audio track',peerUid);return false;}
+  tracks.forEach(t=>{t.enabled=true});
+
+  /* IMPORTANT: route remote microphone directly through one AudioContext.
+     The previous version marked the peer connected even when audio.play()
+     was rejected by desktop Chrome autoplay/output handling. */
   try{
     await unlockVoiceAudio();
-    if(voiceAudioContext&&voiceAudioContext.state!=='closed'){
-      const source=voiceAudioContext.createMediaStreamSource(stream);
-      const gain=voiceAudioContext.createGain();
-      gain.gain.value=1;
-      source.connect(gain).connect(voiceAudioContext.destination);
-      voiceAudioNodes.set(peerUid,{source,gain,stream});
+    if(!voiceAudioContext||voiceAudioContext.state==='closed')throw new Error('AudioContext unavailable');
+    if(voiceAudioContext.state!=='running')throw new Error('AudioContext suspended');
+
+    const old=voiceAudioNodes.get(peerUid);
+    if(old){try{old.source.disconnect()}catch(_){} try{old.gain.disconnect()}catch(_){} voiceAudioNodes.delete(peerUid)}
+
+    const source=voiceAudioContext.createMediaStreamSource(stream);
+    const gain=voiceAudioContext.createGain();
+    gain.gain.setValueAtTime(1,voiceAudioContext.currentTime);
+    source.connect(gain);
+    gain.connect(voiceAudioContext.destination);
+    voiceAudioNodes.set(peerUid,{source,gain,stream});
+
+    /* Keep the HTML element attached as a silent fallback/reference only. */
+    const audio=prepareRemoteAudio(peerUid);
+    audio.muted=true;
+    audio.srcObject=stream;
+
+    console.log('Remote voice audio OUTPUT ACTIVE',peerUid,{context:voiceAudioContext.state,tracks:tracks.length});
+    return true;
+  }catch(e){
+    console.warn('WebAudio remote output failed',peerUid,e);
+    /* Fallback to a normal HTMLMediaElement. It is deliberately unmuted only
+       if WebAudio cannot be used. */
+    try{
+      const audio=prepareRemoteAudio(peerUid);
+      audio.muted=false;
+      audio.volume=1;
+      audio.srcObject=stream;
+      const playResult=audio.play();
+      if(playResult?.catch)await playResult.catch(err=>console.warn('remote audio fallback play',err));
+      console.log('Remote voice HTML AUDIO fallback',peerUid);
       return true;
+    }catch(err){
+      console.warn('Remote audio output failed completely',peerUid,err);
+      return false;
     }
-  }catch(e){console.warn('WebAudio remote audio',e)}
-  return false;
+  }
 }
 
 function voiceIceConfig(){
@@ -2610,8 +2629,7 @@ async function createVoicePeer(remoteUid,force=false){
   entry.call=call;
   call.on('stream',stream=>{
     entry.connected=true;
-    entry.audioReceived=true;
-    addRemoteAudio(remoteUid,stream);
+    entry.audioReceived=await addRemoteAudio(remoteUid,stream);
     updateVoicePlayerList();
     setVoiceStatus('Voice connected');
   });
@@ -2653,7 +2671,7 @@ function setupVoicePeerServer(){
       call.answer(voiceStream);
       call.on('stream',stream=>{
         entry.connected=true;
-        addRemoteAudio(remoteUid,stream);
+        entry.audioReceived=await addRemoteAudio(remoteUid,stream);
         updateVoicePlayerList();
         setVoiceStatus('Voice connected');
       });
@@ -2776,6 +2794,7 @@ window.toggleVoice=async()=>{
     });
     if(room!==onlineRoom){stream.getTracks().forEach(t=>t.stop());throw new Error('The online room changed.');}
     voiceStream=stream; voiceEnabled=true; voiceMuted=false; voiceBoundRoom=room;
+    await unlockVoiceAudio();
     voiceSessionId=Date.now().toString(36)+'_'+Math.random().toString(36).slice(2)+'_'+String(uid).slice(-6);
     voiceStream.getAudioTracks().forEach(t=>t.enabled=true);
     await setLocalVoiceState(true,false,voiceSessionId,null);
