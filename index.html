@@ -751,6 +751,7 @@ Vertical path
 
 .voicePanel{margin-top:12px;padding:10px;border-radius:12px;background:rgba(255,255,255,.08)}
 .voiceBtn{width:100%;border:0;border-radius:10px;padding:11px;background:#2d7cff;color:#fff;font-weight:800;cursor:pointer}.voiceBtn.off{background:#465066}.voiceStatus{font-size:12px;opacity:.8;margin-top:6px;text-align:center}
+.voiceSecondary{margin-top:6px;background:#465066}.voiceControlRow{display:flex;flex-direction:column;gap:4px;margin-top:7px}.voiceControlRow label{font-size:11px;color:#cbd5e1}.voiceControlRow select{width:100%;border:0;border-radius:8px;padding:7px;background:#34415a;color:#fff;font-size:11px}.voicePlayerList{margin-top:8px;display:flex;flex-direction:column;gap:5px}.voicePlayerItem{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:11px;padding:5px 0}.voiceMiniBtn{border:0;border-radius:7px;padding:3px 6px;background:#465066;color:#fff;cursor:pointer;font-size:10px}
 /* EXACT USER-REFERENCE BOARD IMAGE: visual board only; game logic is
 unchanged */
 .boardOuter {
@@ -1034,7 +1035,25 @@ html,body{width:100%;min-width:0;overflow-x:hidden;}
 
             <div id="voicePanel" class="voicePanel" style="display:none">
                 <button id="voiceBtn" class="voiceBtn" onclick="toggleVoice()">🎤 Enable Voice</button>
+                <button id="speakerToggle" class="voiceBtn voiceSecondary" onclick="toggleSpeaker()" style="display:none">🔊 Speaker ON</button>
+                <div class="voiceControlRow">
+                    <label>Voice mode</label>
+                    <select id="voiceModeSelect" onchange="changeVoiceMode(this.value)">
+                        <option value="party">👥 Team / Party</option>
+                        <option value="proximity">🌐 Proximity</option>
+                        <option value="all" selected>🌐 All Players</option>
+                    </select>
+                </div>
+                <div class="voiceControlRow">
+                    <label>🎤 Input</label>
+                    <select id="voiceInputSelect" onchange="changeVoiceInput(this.value)"><option value="">Default microphone</option></select>
+                </div>
+                <div class="voiceControlRow">
+                    <label>🔊 Output</label>
+                    <select id="voiceOutputSelect" onchange="changeVoiceOutput(this.value)"><option value="">Default speaker</option></select>
+                </div>
                 <div id="voiceStatus" class="voiceStatus">Voice chat off</div>
+                <div id="voicePlayerList" class="voicePlayerList"></div>
             </div>
 
             <div class="rules">
@@ -1144,15 +1163,13 @@ const START = {
    This removes any ambiguity from rotating the path during movement.
 */
 const COLOR_PATHS = {
-    // Every colour uses the same physical 52-cell outer track,
-    // rotated so its own X-marked start is position 0.
-    // No centre/finish-lane cells are included in this outer track.
+    // EXACT 52-cell outer route for each playable colour.
+    // Each route is only a rotation of PATH, so every token stays on
+    // the drawn common track and never jumps to an unrelated square.
     red: PATH.slice(0),
-    green: PATH.slice(39).concat(PATH.slice(0,39)), // green starts at PATH[39] and follows the same 52-cell outer track
+    green: PATH.slice(39).concat(PATH.slice(0,39)),
     yellow: PATH.slice(26).concat(PATH.slice(0,26)),
-    blue: PATH.slice(13).concat(PATH.slice(0,13)),
-    purple: PATH.slice(0),
-    orange: PATH.slice(0)
+    blue: PATH.slice(13).concat(PATH.slice(0,13))
 };
 
 
@@ -1459,9 +1476,13 @@ function diceFinished() {
 
 function canMove(player, position, tokenIndex) {
     if (!player || awaitingRoll) return false;
-    if (position >= 57) return false;
-    if (position === -1) return diceValue === 6;
-    return position + diceValue <= 57;
+    const pos = Number(position);
+    const roll = Number(diceValue);
+    if (!Number.isInteger(pos) || !Number.isInteger(roll) || roll < 1 || roll > 6) return false;
+    if (pos >= 57) return false;
+    if (pos === -1) return roll === 6;
+    if (pos < 0 || pos >= 57) return false;
+    return pos + roll <= 57;
 }
 
 
@@ -1489,159 +1510,52 @@ function getExactOuterRoute(color) {
 }
 
 function tokenPosition(color, position, tokenIndex) {
-
-    /*
-    Token inside home.
-    */
-
+    // Base / yard positions.
     if (position === -1) {
-
         const homes = {
-
-            red: [
-                [14.2578,14.4531],
-                [24.4141,14.4531],
-                [14.2578,24.8047],
-                [24.4141,24.8047]
-            ],
-
-            green: [
-                [14.2578,75.3906],
-                [24.4141,75.3906],
-                [14.2578,85.5469],
-                [24.4141,85.5469]
-            ],
-
-            blue: [
-                [75.0000,14.4531],
-                [85.3516,14.4531],
-                [75.0000,24.8047],
-                [85.3516,24.8047]
-            ],
-
-            yellow: [
-                [75.0000,75.3906],
-                [85.3516,75.3906],
-                [75.0000,85.5469],
-                [85.3516,85.5469]
-            ],
-
-            /* Purple/orange are never placed in the center.
-               For the standard 4-home board, extra colors use
-               dedicated edge holding positions until their
-               expanded 5/6-player board is selected. */
-            purple: [
-                [3,50],[7,50],[3,54],[7,54]
-            ],
-
-            orange: [
-                [93,50],[97,50],[93,54],[97,54]
-            ]
-
+            red: [[14.2578,14.4531],[24.4141,14.4531],[14.2578,24.8047],[24.4141,24.8047]],
+            green: [[14.2578,75.3906],[24.4141,75.3906],[14.2578,85.5469],[24.4141,85.5469]],
+            blue: [[75.0000,14.4531],[85.3516,14.4531],[75.0000,24.8047],[85.3516,24.8047]],
+            yellow: [[75.0000,75.3906],[85.3516,75.3906],[75.0000,85.5469],[85.3516,85.5469]]
         };
-
-        const arr =
-            homes[color] || homes.red;
-
-        return {
-            left: arr[tokenIndex][0],
-            top: arr[tokenIndex][1]
-        };
-
+        const arr = homes[color] || homes.red;
+        return {left:arr[tokenIndex][0], top:arr[tokenIndex][1]};
     }
 
+    // Final home / win position. A token reaches this position only after
+    // completing its complete outer route and its own coloured finish lane.
+    if (position === 57) return {left:50, top:50};
 
-    /*
-    Final home position: the centre of the board.
-    */
-    if (color === "green" && position === 57) {
-        return { left: 50, top: 57 };
-    }
-
-    if (position === 57) {
-        return { left: 50, top: 50 };
-    }
-
-    /*
-    Common path.
-    */
-
-    if (position < 52) {
-
-        // Each colour follows the SAME 52-cell outer track,
-        // but starts at its own start cell. This explicit route
-        // keeps the coin movement exactly on the drawn Ludo path.
+    // Common 52-cell route. Position 0 is always that colour's own start.
+    if (position >= 0 && position < 52) {
         const route = getExactOuterRoute(color);
         const coordinate = route[position];
-
-        /*
-        Convert 15x15 coordinates to percentage.
-        */
-
+        if (!coordinate) return {left:50,top:50};
         return {
-            left: ((coordinate[1] + .5) / 15) * 100,
-            top: ((coordinate[0] + .5) / 15) * 100
+            left:((coordinate[1]+0.5)/15)*100,
+            top:((coordinate[0]+0.5)/15)*100
         };
-
     }
 
-
-    /*
-    Home lane: exactly the six colored cells leading into the center.
-    These positions are visual path cells only; they do NOT change
-    turn rules.
-    */
-
-    // After common-path position 51, the coin enters ONLY its own
-    // six-cell coloured home lane and continues cell-by-cell to the final
-    // home cell.
-    // Position 57 is the separate final/winning cell for every colour.
-    // Reaching position 57 completes the coin and is required for every
-    // colour.
+    // Finish lane: positions 52-56 are the five coloured finish steps;
+    // position 57 is the centre/winning position.
     const lane = {
-        // Five coloured cells (positions 52-56), then position 57 is the
-        // centre finish/winning position.
-        red: [
-            [7,2],[7,3],[7,4],[7,5],[7,6]
-        ],
-        green: [
-            [13,7],[12,7],[11,7],[10,7],[9,7]
-        ],
-        yellow: [
-            [7,13],[7,12],[7,11],[7,10],[7,9]
-        ],
-        blue: [
-            [1,7],[2,7],[3,7],[4,7],[5,7]
-        ]
+        red:    [[7,2],[7,3],[7,4],[7,5],[7,6]],
+        green:  [[13,7],[12,7],[11,7],[10,7],[9,7]],
+        yellow: [[7,13],[7,12],[7,11],[7,10],[7,9]],
+        blue:   [[1,7],[2,7],[3,7],[4,7],[5,7]]
     };
-
-
-    const laneData =
-        lane[color];
-
-    if (laneData) {
-
-        const step =
-            position - 52;
-
-        if (laneData[step]) {
-
-            return {
-                left: ((laneData[step][1] + .5) / 15) * 100,
-                top: ((laneData[step][0] + .5) / 15) * 100
-            };
-
-        }
-
+    const step = position - 52;
+    const laneData = lane[color];
+    if (laneData && laneData[step]) {
+        const coordinate = laneData[step];
+        return {
+            left:((coordinate[1]+0.5)/15)*100,
+            top:((coordinate[0]+0.5)/15)*100
+        };
     }
-
-    return {
-        left: 50,
-        top: 50
-    };
-
+    return {left:50,top:50};
 }
-
 
 /* =====================================================
    RENDER TOKENS
@@ -2149,7 +2063,7 @@ const firebaseConfig={
 };
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getDatabase(app);
 window.computerMode=false;
-let uid=null,online=false,onlineRoom=null,onlineMax=2,onlineColor=null,roomUnsub=null,gameUnsub=null,roomVoiceUnsub=null,roomPlayerStates={},originalStartGame=window.startGame,originalRollDice=window.rollDice,originalMoveToken=window.moveToken;
+let uid=null,online=false,onlineRoom=null,onlineMax=2,onlineColor=null,roomUnsub=null,gameUnsub=null,roomVoiceUnsub=null,roomPlayerStates={},firebaseConnUnsub=null,originalStartGame=window.startGame,originalRollDice=window.rollDice,originalMoveToken=window.moveToken;
 let authReady=new Promise(resolve=>onAuthStateChanged(auth,user=>{uid=user?user.uid:null;resolve(uid);}));
 
 function show(id){document.querySelectorAll('.modalScreen').forEach(x=>x.style.display='none');document.getElementById(id).style.display='flex'}
@@ -2198,8 +2112,26 @@ signInAnonymously(auth).catch(e=>{console.error(e);alert('Firebase login failed:
 function code(){return Math.random().toString(36).slice(2,8).toUpperCase()}
 function roomRef(){return ref(db,'rooms/'+onlineRoom)}
 
-window.createRoom=async()=>{try{await authReady;if(!uid){throw new Error('Firebase login is not ready. Please wait 1 second and try again.')}let c='';for(let i=0;i<8;i++){c=code();const snap=await get(ref(db,'rooms/'+c));if(!snap.exists())break}onlineRoom=c;online=true;onlineColor=null;document.getElementById('roomCode').textContent=c;openLobby();await set(roomRef(),{maxPlayers:onlineMax,status:'waiting',hostId:uid,createdAt:Date.now(),players:{[uid]:{name:'Player 1',uid,connected:true,color:null,joinedAt:Date.now()}}});await onDisconnect(ref(db,'rooms/'+c+'/players/'+uid+'/connected')).set(false);document.getElementById('lobbyStatus').textContent='Room created • choose your color';}catch(e){console.error(e);alert('Could not create room: '+e.message)}};
-window.joinRoom=async()=>{const c=(document.getElementById('roomInput').value||'').trim().toUpperCase();if(c.length!==6){alert('Enter the 6-character room code.');return}if(!uid){alert('Connecting to Firebase... try again in a moment.');return}const snap=await get(ref(db,'rooms/'+c));if(!snap.exists()){alert('Room not found.');return}const r=snap.val();const count=Object.values(r.players||{}).filter(p=>p.connected!==false).length;if(count>=r.maxPlayers){alert('Room is full.');return}onlineRoom=c;online=true;onlineMax=r.maxPlayers;onlineColor=null;await set(ref(db,'rooms/'+c+'/players/'+uid),{name:'Player '+(count+1),uid,connected:true,color:null,joinedAt:Date.now()});await onDisconnect(ref(db,'rooms/'+c+'/players/'+uid+'/connected')).set(false);openLobby()};
+window.createRoom=async()=>{try{await authReady;if(!uid){throw new Error('Firebase login is not ready. Please wait 1 second and try again.')}let c='';for(let i=0;i<8;i++){c=code();const snap=await get(ref(db,'rooms/'+c));if(!snap.exists())break}onlineRoom=c;online=true;onlineColor=null;document.getElementById('roomCode').textContent=c;openLobby();await set(roomRef(),{maxPlayers:onlineMax,status:'waiting',hostId:uid,createdAt:Date.now(),players:{[uid]:{name:'Player 1',uid,connected:true,color:null,joinedAt:Date.now()}}});await onDisconnect(ref(db,'rooms/'+c+'/players/'+uid+'/connected')).set(false);bindFirebaseConnectionState();document.getElementById('lobbyStatus').textContent='Room created • choose your color';}catch(e){console.error(e);alert('Could not create room: '+e.message)}};
+window.joinRoom=async()=>{const c=(document.getElementById('roomInput').value||'').trim().toUpperCase();if(c.length!==6){alert('Enter the 6-character room code.');return}if(!uid){alert('Connecting to Firebase... try again in a moment.');return}const snap=await get(ref(db,'rooms/'+c));if(!snap.exists()){alert('Room not found.');return}const r=snap.val();const count=Object.values(r.players||{}).filter(p=>p.connected!==false).length;if(count>=r.maxPlayers){alert('Room is full.');return}onlineRoom=c;online=true;onlineMax=r.maxPlayers;onlineColor=null;await set(ref(db,'rooms/'+c+'/players/'+uid),{name:'Player '+(count+1),uid,connected:true,color:null,joinedAt:Date.now()});await onDisconnect(ref(db,'rooms/'+c+'/players/'+uid+'/connected')).set(false);bindFirebaseConnectionState();openLobby()};
+function bindFirebaseConnectionState(){
+  if(firebaseConnUnsub)firebaseConnUnsub();
+  if(!onlineRoom||!uid)return;
+  firebaseConnUnsub=onValue(ref(db,'.info/connected'),async snap=>{
+    if(snap.val()===true&&onlineRoom&&uid){
+      try{
+        await onDisconnect(ref(db,'rooms/'+onlineRoom+'/players/'+uid+'/connected')).set(false);
+        await update(ref(db,'rooms/'+onlineRoom+'/players/'+uid),{connected:true});
+        if(voiceEnabled){
+          // A network reconnect must establish a fresh voice session so old
+          // peer connections/signaling cannot leave the audio path stale.
+          await cleanupVoice();
+          await toggleVoice();
+        }
+      }catch(e){console.warn('Firebase reconnect',e)}
+    }
+  });
+}
 function openLobby(){
   show('lobbyScreen');
   document.getElementById('roomCode').textContent=onlineRoom;
@@ -2265,11 +2197,7 @@ function mergeRoomVoiceState(roomPlayers){
   roomPlayerStates=roomPlayers||{};
   players=(players||[]).map(p=>{
     const rp=roomPlayerStates[p.uid]||{};
-    return {...p,
-      voiceEnabled:rp.voiceEnabled===true,
-      muted:rp.muted===true,
-      voiceSessionId:rp.voiceSessionId||null,voicePeerId:rp.voicePeerId||null
-    };
+    return {...p,connected:rp.connected!==false,voiceEnabled:rp.voiceEnabled===true,muted:rp.muted===true,voiceSessionId:rp.voiceSessionId||null,voicePeerId:rp.voicePeerId||null,voiceMode:rp.voiceMode||'all'};
   });
   updateVoicePlayerList();
 }
@@ -2431,14 +2359,13 @@ window.moveToken=async(playerIndex,tokenIndex)=>{
 };
 
 /* =====================================================
-   WEBRTC VOICE CHAT — FRESH NATIVE WEBRTC
-   VOICE CODE ONLY: game/board/token/dice logic is untouched.
-   - Native RTCPeerConnection; no PeerJS.
-   - Firebase RTDB is used only as signaling/state.
-   - Each player writes signaling only inside their own player node.
-   - Microphone and Speaker are independent controls.
-   - Mute = stop sending microphone audio only.
-   - Speaker Off = stop local playback only; receiving continues.
+   WEBRTC VOICE CHAT
+   - Native WebRTC + Firebase RTDB signaling.
+   - Mic ON/OFF and Speaker ON/OFF are independent.
+   - Team/Party, Proximity and All Players modes.
+   - Individual remote-player mute is local to this device.
+   - Input/output device selection when the browser supports it.
+   - Disabling and enabling voice creates a fresh session and reconnects.
 ===================================================== */
 const voicePeers=new Map();
 let voiceStream=null;
@@ -2448,356 +2375,98 @@ let voiceSessionId=null;
 let voiceMuted=false;
 let voiceSpeakerOn=true;
 let voiceChanging=false;
-let voiceAudioContext=null;
-const voiceAudioNodes=new Map();
-const voiceAudioElements=new Map();
+let voiceMode='all';
+let voiceInputDeviceId='';
+let voiceOutputDeviceId='';
+const voiceRemoteMutes=new Map();
 const voiceSignalUnsubs=new Map();
 const voicePendingCandidates=new Map();
+const voiceAudioElements=new Map();
 
 function voicePair(a,b){return [String(a),String(b)].sort().join('_')}
-function voiceSignalPath(ownerUid,session,pair){
-  return 'rooms/'+onlineRoom+'/players/'+ownerUid+'/voiceSignal/'+session+'/'+pair;
-}
+function voiceSignalPath(ownerUid,session,pair){return 'rooms/'+onlineRoom+'/players/'+ownerUid+'/voiceSignal/'+session+'/'+pair}
 function setVoiceStatus(text){const el=document.getElementById('voiceStatus');if(el)el.textContent=text}
-function activeRemotePlayers(){return (players||[]).filter(p=>p&&p.uid&&p.uid!==uid&&p.voiceEnabled===true&&p.connected!==false)}
+function voicePlayerName(uidValue){const p=(players||[]).find(x=>x.uid===uidValue);return p?.name||'Player'}
+function voicePlayerCanHear(remote){
+  if(!remote||remote.uid===uid||remote.connected===false||remote.voiceEnabled!==true)return false;
+  if(voiceMode==='all'||voiceMode==='party')return true;
+  // Proximity mode: connect when any active token of either player is within
+  // six board cells. Base tokens are ignored until they enter the board.
+  const mine=players?.find(p=>p.uid===uid);
+  if(!mine)return false;
+  const minePts=(mine.tokens||[]).filter(x=>x>=0&&x<57).map(x=>tokenPosition(mine.color,x,0));
+  const remotePts=(remote.tokens||[]).filter(x=>x>=0&&x<57).map(x=>tokenPosition(remote.color,x,0));
+  for(const a of minePts)for(const b of remotePts){
+    const dx=Math.abs(a.left-b.left)*15/100,dy=Math.abs(a.top-b.top)*15/100;
+    if(Math.sqrt(dx*dx+dy*dy)<=6.5)return true;
+  }
+  return false;
+}
+function activeRemotePlayers(){return (players||[]).filter(p=>voicePlayerCanHear(p))}
 function ensureVoicePanel(){
   const panel=document.getElementById('voicePanel');
-  if(panel){
-    panel.style.display=(online&&onlineRoom)?'block':'none';
-    if(!document.getElementById('voicePlayerList')){
-      const list=document.createElement('div');
-      list.id='voicePlayerList'; list.className='voiceStatus'; panel.appendChild(list);
-    }
-    updateVoicePlayerList();
-  }
-}
-async function unlockVoiceAudio(){
-  try{
-    const C=window.AudioContext||window.webkitAudioContext;
-    if(!C)return false;
-    if(!voiceAudioContext||voiceAudioContext.state==='closed')voiceAudioContext=new C();
-    if(voiceAudioContext.state!=='running')await voiceAudioContext.resume();
-    return voiceAudioContext.state==='running';
-  }catch(e){console.warn('voice speaker context',e);return false}
+  if(!panel)return;
+  panel.style.display=(online&&onlineRoom)?'block':'none';
+  updateVoicePlayerList();
+  if(voiceEnabled)refreshVoiceDevices();
 }
 function prepareRemoteAudio(peerUid){
   let audio=voiceAudioElements.get(peerUid);
-  if(audio&&document.body.contains(audio)){
-    audio.muted=!voiceSpeakerOn;
-    audio.volume=voiceSpeakerOn?1:0;
-    return audio;
-  }
+  if(audio&&document.body.contains(audio))return audio;
   audio=document.createElement('audio');
-  audio.id='voiceAudio_'+peerUid;
-  audio.autoplay=true;
-  audio.playsInline=true;
-  audio.setAttribute('autoplay','');
-  audio.setAttribute('playsinline','');
-  audio.muted=!voiceSpeakerOn;
-  audio.volume=voiceSpeakerOn?1:0;
-  audio.style.position='fixed';audio.style.left='-10000px';audio.style.top='0';
-  audio.style.width='1px';audio.style.height='1px';audio.style.opacity='0.01';audio.style.pointerEvents='none';
-  document.body.appendChild(audio);
-  voiceAudioElements.set(peerUid,audio);
-  return audio;
+  audio.id='voiceAudio_'+peerUid;audio.autoplay=true;audio.playsInline=true;audio.setAttribute('autoplay','');audio.setAttribute('playsinline','');
+  audio.muted=voiceSpeakerOn||voiceRemoteMutes.get(peerUid)===true?false:false;
+  audio.style.position='fixed';audio.style.left='-10000px';audio.style.top='0';audio.style.width='1px';audio.style.height='1px';audio.style.opacity='0.01';audio.style.pointerEvents='none';
+  document.body.appendChild(audio);voiceAudioElements.set(peerUid,audio);applyRemoteAudioState(peerUid);return audio;
 }
-function prepareVoiceAudioForRemotes(){for(const p of activeRemotePlayers())prepareRemoteAudio(p.uid)}
-function applySpeakerState(){
+function applyRemoteAudioState(peerUid){
+  const audio=voiceAudioElements.get(peerUid);if(!audio)return;
+  audio.muted=!voiceSpeakerOn||voiceRemoteMutes.get(peerUid)===true;
+  audio.volume=(voiceSpeakerOn&&!voiceRemoteMutes.get(peerUid))?1:0;
+  if(audio.srcObject&&!audio.muted){const p=audio.play();if(p?.catch)p.catch(()=>{})}
+}
+function applyOutputDevice(){
   for(const audio of voiceAudioElements.values()){
-    audio.muted=!voiceSpeakerOn;
-    audio.volume=voiceSpeakerOn?1:0;
-    if(voiceSpeakerOn&&audio.srcObject){const pr=audio.play();if(pr?.catch)pr.catch(()=>{})}
-  }
-  for(const node of voiceAudioNodes.values())if(node?.gain&&voiceAudioContext)node.gain.gain.setValueAtTime(voiceSpeakerOn?1:0,voiceAudioContext.currentTime);
-}
-async function addRemoteAudio(peerUid,stream){
-  if(!stream)return false;
-  const tracks=stream.getAudioTracks().filter(t=>t.readyState!=='ended');
-  if(!tracks.length)return false;
-  tracks.forEach(t=>{t.enabled=true});
-  const audio=prepareRemoteAudio(peerUid);
-  let played=false;
-  try{
-    audio.srcObject=stream;
-    audio.muted=!voiceSpeakerOn;
-    audio.volume=voiceSpeakerOn?1:0;
-    if(voiceSpeakerOn){const pr=audio.play();if(pr?.then)await pr.then(()=>{played=true}).catch(()=>{})}
-  }catch(e){console.warn('remote speaker element',e)}
-  /* Desktop fallback: route the same remote track through an AudioContext
-     that was unlocked from the Enable Voice button. This does not touch the
-     microphone stream or any game code. */
-  try{
-    if(!played&&voiceSpeakerOn&&await unlockVoiceAudio()){
-      const old=voiceAudioNodes.get(peerUid);
-      if(old){try{old.source.disconnect()}catch(_){}try{old.gain.disconnect()}catch(_){}
-      }
-      const source=voiceAudioContext.createMediaStreamSource(stream);
-      const gain=voiceAudioContext.createGain();
-      gain.gain.setValueAtTime(voiceSpeakerOn?1:0,voiceAudioContext.currentTime);
-      source.connect(gain);gain.connect(voiceAudioContext.destination);
-      voiceAudioNodes.set(peerUid,{source,gain});
-      audio.muted=true;
-      played=true;
-    }
-  }catch(e){console.warn('remote speaker context',e)}
-  return played;
-}
-function removeRemoteAudio(peerUid){
-  const node=voiceAudioNodes.get(peerUid);
-  if(node){try{node.source.disconnect()}catch(_){}try{node.gain.disconnect()}catch(_){}voiceAudioNodes.delete(peerUid)}
-  const audio=voiceAudioElements.get(peerUid)||document.getElementById('voiceAudio_'+peerUid);
-  if(audio){try{audio.pause()}catch(_){}audio.srcObject=null;audio.remove()}
-  voiceAudioElements.delete(peerUid);
-}
-function clearVoiceSignalListeners(){
-  for(const unsub of voiceSignalUnsubs.values()){try{unsub()}catch(_){} }
-  voiceSignalUnsubs.clear();
-  voicePendingCandidates.clear();
-}
-function voiceIceConfig(){
-  return {
-    iceServers:[
-      {urls:'stun:stun.l.google.com:19302'},
-      {urls:'stun:stun1.l.google.com:19302'},
-      {urls:'stun:stun2.l.google.com:19302'},
-      {urls:'stun:stun3.l.google.com:19302'},
-      {urls:'stun:stun4.l.google.com:19302'},
-      {urls:'stun:stun.cloudflare.com:3478'},
-      {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
-      {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
-      {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
-    ],
-    iceTransportPolicy:'all',
-    bundlePolicy:'max-bundle',
-    rtcpMuxPolicy:'require'
-  };
-}
-async function addPendingCandidates(entry){
-  const list=voicePendingCandidates.get(entry.remoteUid)||[];
-  if(!entry.pc.remoteDescription)return;
-  voicePendingCandidates.delete(entry.remoteUid);
-  for(const c of list){try{await entry.pc.addIceCandidate(new RTCIceCandidate(c))}catch(e){console.warn('queued ICE',e)}}
-}
-async function handleRemoteCandidates(entry,snapVal){
-  if(!snapVal)return;
-  const seen=entry.seenCandidates||new Set();entry.seenCandidates=seen;
-  for(const [key,c] of Object.entries(snapVal)){
-    if(seen.has(key)||!c)continue;
-    seen.add(key);
-    if(!entry.pc.remoteDescription){
-      const q=voicePendingCandidates.get(entry.remoteUid)||[];q.push(c);voicePendingCandidates.set(entry.remoteUid,q);
-    }else{
-      try{await entry.pc.addIceCandidate(new RTCIceCandidate(c))}catch(e){console.warn('remote ICE',e)}
-    }
+    if(typeof audio.setSinkId==='function')audio.setSinkId(voiceOutputDeviceId||'').catch(()=>{});
   }
 }
-function bindSignalValue(path,key,handler){
-  const r=ref(db,path);
-  const unsub=onValue(r,snap=>handler(snap.val()||null));
-  voiceSignalUnsubs.set(key,unsub);
-  return unsub;
-}
-async function destroyVoicePeer(remoteUid,removeMap=true){
-  const entry=voicePeers.get(remoteUid);
-  if(entry){
-    try{entry.pc.onicecandidate=null;entry.pc.ontrack=null;entry.pc.onconnectionstatechange=null;entry.pc.close()}catch(_){}
-  }
-  for(const key of [...voiceSignalUnsubs.keys()])if(key.includes('|'+remoteUid+'|')){try{voiceSignalUnsubs.get(key)()}catch(_){}voiceSignalUnsubs.delete(key)}
-  voicePendingCandidates.delete(remoteUid);
-  removeRemoteAudio(remoteUid);
-  if(removeMap)voicePeers.delete(remoteUid);
-}
-function voiceRemoteState(remoteUid){return (players||[]).find(p=>p.uid===remoteUid)||null}
-function setupPeerEntry(remoteUid,initiator,remoteSession,localSession){
-  const remote=voiceRemoteState(remoteUid);
-  if(!remote||!voiceStream||!onlineRoom||!uid)return null;
-  const pair=voicePair(uid,remoteUid);
-  const localPath=voiceSignalPath(uid,localSession,pair);
-  const remotePath=voiceSignalPath(remoteUid,remoteSession,pair);
-  const pc=new RTCPeerConnection(voiceIceConfig());
-  const entry={pc,remoteUid,initiator,connected:false,audioReceived:false,seenCandidates:new Set(),makingOffer:false};
-  voicePeers.set(remoteUid,entry);
+function removeRemoteAudio(peerUid){const audio=voiceAudioElements.get(peerUid);if(audio){try{audio.pause()}catch(_){}audio.srcObject=null;audio.remove()}voiceAudioElements.delete(peerUid)}
+function clearVoiceSignalListeners(){for(const u of voiceSignalUnsubs.values()){try{u()}catch(_){}}voiceSignalUnsubs.clear();voicePendingCandidates.clear()}
+function voiceIceConfig(){return {iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'},{urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},{urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},{urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}],iceTransportPolicy:'all',bundlePolicy:'max-bundle',rtcpMuxPolicy:'require'}}
+async function addPendingCandidates(entry){const list=voicePendingCandidates.get(entry.remoteUid)||[];if(!entry.pc.remoteDescription)return;voicePendingCandidates.delete(entry.remoteUid);for(const c of list){try{await entry.pc.addIceCandidate(new RTCIceCandidate(c))}catch(_){} }}
+async function handleRemoteCandidates(entry,data){if(!data)return;const seen=entry.seenCandidates||new Set();entry.seenCandidates=seen;for(const [key,c] of Object.entries(data)){if(seen.has(key)||!c)continue;seen.add(key);if(!entry.pc.remoteDescription){const q=voicePendingCandidates.get(entry.remoteUid)||[];q.push(c);voicePendingCandidates.set(entry.remoteUid,q)}else{try{await entry.pc.addIceCandidate(new RTCIceCandidate(c))}catch(_){} }}}
+function bindVoiceSignal(path,key,handler){const u=onValue(ref(db,path),snap=>handler(snap.val()||null));voiceSignalUnsubs.set(key,u);return u}
+async function destroyVoicePeer(remoteUid,removeMap=true){const e=voicePeers.get(remoteUid);if(e){try{e.pc.onicecandidate=null;e.pc.ontrack=null;e.pc.onconnectionstatechange=null;e.pc.close()}catch(_){} }for(const key of [...voiceSignalUnsubs.keys()])if(key.includes('|'+remoteUid+'|')){try{voiceSignalUnsubs.get(key)()}catch(_){}voiceSignalUnsubs.delete(key)}voicePendingCandidates.delete(remoteUid);removeRemoteAudio(remoteUid);if(removeMap)voicePeers.delete(remoteUid)}
+function setupVoicePeer(remoteUid,initiator,remoteSession,localSession){
+  const remote=(players||[]).find(p=>p.uid===remoteUid);if(!remote||!voiceStream||!onlineRoom||!uid)return null;
+  const pair=voicePair(uid,remoteUid),localPath=voiceSignalPath(uid,localSession,pair),remotePath=voiceSignalPath(remoteUid,remoteSession,pair),pc=new RTCPeerConnection(voiceIceConfig());
+  const entry={pc,remoteUid,initiator,connected:false,audioReceived:false,seenCandidates:new Set()};voicePeers.set(remoteUid,entry);
   for(const track of voiceStream.getAudioTracks())pc.addTrack(track,voiceStream);
-  pc.ontrack=async e=>{
-    let stream=e.streams?.[0];
-    if(!stream){stream=new MediaStream();stream.addTrack(e.track)}
-    entry.audioReceived=true;
-    await addRemoteAudio(remoteUid,stream);
-    updateVoicePlayerList();
-    setVoiceStatus('Voice connected');
-  };
-  pc.onicecandidate=async e=>{
-    if(!e.candidate||voicePeers.get(remoteUid)!==entry)return;
-    try{
-      const cr=push(ref(db,localPath+'/candidates'));
-      await set(cr,e.candidate.toJSON());
-    }catch(err){console.warn('voice ICE write',err)}
-  };
-  pc.onconnectionstatechange=()=>{
-    const st=pc.connectionState;
-    if(st==='connected')entry.connected=true;
-    if(st==='failed'||st==='closed'){
-      entry.connected=false;entry.audioReceived=false;removeRemoteAudio(remoteUid);
-    }
-    updateVoicePlayerList();
-    const active=activeRemotePlayers();
-    const connected=[...voicePeers.values()].filter(x=>x.connected&&x.audioReceived).length;
-    if(active.length&&connected===active.length)setVoiceStatus('Voice connected');
-    else if(voiceEnabled)setVoiceStatus('Connecting voice… '+connected+'/'+active.length);
-  };
-  bindSignalValue(remotePath+'/candidates','candidates|'+remoteUid+'|'+localSession+'|'+remoteSession,v=>handleRemoteCandidates(entry,v));
-  if(initiator){
-    bindSignalValue(remotePath+'/answer','answer|'+remoteUid+'|'+localSession+'|'+remoteSession,async v=>{
-      if(!v||entry.pc.remoteDescription)return;
-      try{await pc.setRemoteDescription(new RTCSessionDescription(v));await addPendingCandidates(entry)}catch(e){console.warn('voice answer',e)}
-    });
-  }else{
-    bindSignalValue(remotePath+'/offer','offer|'+remoteUid+'|'+localSession+'|'+remoteSession,async v=>{
-      if(!v||pc.remoteDescription)return;
-      try{
-        await pc.setRemoteDescription(new RTCSessionDescription(v));
-        await addPendingCandidates(entry);
-        const answer=await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        await set(ref(db,localPath+'/answer'),{type:pc.localDescription.type,sdp:pc.localDescription.sdp});
-      }catch(e){console.warn('voice offer/answer',e)}
-    });
-  }
-  if(initiator){
-    (async()=>{
-      try{
-        if(entry.makingOffer)return;entry.makingOffer=true;
-        const offer=await pc.createOffer({offerToReceiveAudio:true});
-        await pc.setLocalDescription(offer);
-        await set(ref(db,localPath+'/offer'),{type:pc.localDescription.type,sdp:pc.localDescription.sdp});
-      }catch(e){console.warn('voice offer',e)}finally{entry.makingOffer=false}
-    })();
-  }
+  pc.ontrack=e=>{const stream=e.streams?.[0]||new MediaStream([e.track]);entry.audioReceived=true;const audio=prepareRemoteAudio(remoteUid);audio.srcObject=stream;applyRemoteAudioState(remoteUid);updateVoicePlayerList();};
+  pc.onicecandidate=async e=>{if(!e.candidate||voicePeers.get(remoteUid)!==entry)return;try{await set(push(ref(db,localPath+'/candidates')),e.candidate.toJSON())}catch(_){} };
+  pc.onconnectionstatechange=()=>{const st=pc.connectionState;entry.connected=st==='connected';if(st==='failed'||st==='closed'){entry.audioReceived=false;removeRemoteAudio(remoteUid)}updateVoicePlayerList();const wanted=activeRemotePlayers().length,connected=[...voicePeers.values()].filter(x=>x.connected&&x.audioReceived).length;setVoiceStatus(voiceEnabled?(wanted&&connected===wanted?'Voice connected':'Connecting voice… '+connected+'/'+wanted):'Voice chat off')};
+  bindVoiceSignal(remotePath+'/candidates','cand|'+remoteUid+'|'+localSession+'|'+remoteSession,v=>handleRemoteCandidates(entry,v));
+  if(initiator){bindVoiceSignal(remotePath+'/answer','ans|'+remoteUid+'|'+localSession+'|'+remoteSession,async v=>{if(!v||pc.remoteDescription)return;try{await pc.setRemoteDescription(new RTCSessionDescription(v));await addPendingCandidates(entry)}catch(_){} });
+    (async()=>{try{const offer=await pc.createOffer({offerToReceiveAudio:true});await pc.setLocalDescription(offer);await set(ref(db,localPath+'/offer'),{type:pc.localDescription.type,sdp:pc.localDescription.sdp})}catch(_){} })();
+  }else{bindVoiceSignal(remotePath+'/offer','off|'+remoteUid+'|'+localSession+'|'+remoteSession,async v=>{if(!v||pc.remoteDescription)return;try{await pc.setRemoteDescription(new RTCSessionDescription(v));await addPendingCandidates(entry);const answer=await pc.createAnswer();await pc.setLocalDescription(answer);await set(ref(db,localPath+'/answer'),{type:pc.localDescription.type,sdp:pc.localDescription.sdp})}catch(_){} });}
   return entry;
 }
-async function connectVoicePeer(remoteUid){
-  if(voiceChanging||!voiceEnabled||!voiceStream||!onlineRoom||!uid)return;
-  const remote=voiceRemoteState(remoteUid);
-  if(!remote||remote.voiceEnabled!==true||!remote.voiceSessionId)return;
-  const existing=voicePeers.get(remoteUid);
-  if(existing&&(existing.connected||existing.pc.connectionState==='connecting'||existing.pc.connectionState==='new'))return;
-  if(existing)await destroyVoicePeer(remoteUid);
-  const initiator=String(uid)<String(remoteUid);
-  const localSession=voiceSessionId;
-  setupPeerEntry(remoteUid,initiator,remote.voiceSessionId,localSession);
-  updateVoicePlayerList();
-}
-async function connectVoicePeers(){
-  if(voiceChanging||!voiceEnabled||!voiceStream||!onlineRoom||!uid)return;
-  prepareVoiceAudioForRemotes();
-  const remotes=activeRemotePlayers();
-  const wanted=new Set(remotes.map(p=>p.uid));
-  for(const remote of [...voicePeers.keys()])if(!wanted.has(remote))await destroyVoicePeer(remote);
-  if(!remotes.length){setVoiceStatus('Waiting for another player to enable voice');updateVoicePlayerList();return}
-  for(const p of remotes){try{await connectVoicePeer(p.uid)}catch(e){console.warn('voice peer',e)}}
-  const connected=[...voicePeers.values()].filter(e=>e.connected&&e.audioReceived).length;
-  setVoiceStatus(connected===remotes.length?'Voice connected':'Connecting voice… '+connected+'/'+remotes.length);
-  updateVoicePlayerList();
-}
-async function setLocalVoiceState(enabled,muted,session){
-  if(!onlineRoom||!uid)return;
-  const data={voiceEnabled:!!enabled,muted:!!muted,voiceSessionId:enabled?(session||voiceSessionId||''):null,voicePeerId:null};
-  await update(ref(db,'rooms/'+onlineRoom+'/players/'+uid),data);
-}
-function updateVoicePlayerList(){
-  const panel=document.getElementById('voicePlayerList');if(!panel)return;
-  panel.innerHTML=(players||[]).map((p,i)=>{
-    const isMe=p.uid===uid,enabled=p.voiceEnabled===true,muted=p.muted===true;
-    const ve=voicePeers.get(p.uid);const state=ve?.connected&&ve?.audioReceived?'connected':(ve?.pc?'connecting':null);
-    let status=enabled?(muted?'🔇 Muted':'🎤 Unmuted'):'🎤 Off';
-    if(enabled&&!isMe){if(state==='connected')status+=' • 🔊 Connected';else if(state==='connecting')status+=' • Connecting…'}
-    const button=isMe&&enabled?' <button onclick="toggleMute()" style="border:0;border-radius:8px;padding:3px 7px;cursor:pointer">'+(muted?'Unmute':'Mute')+'</button>':'';
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;gap:8px"><span>'+String(p.name||('Player '+(i+1))).replace(/[<>&"']/g,'')+'</span><span>'+status+button+'</span></div>';
-  }).join('');
-  const old=document.getElementById('speakerToggle');
-  if(old)old.textContent=voiceSpeakerOn?'🔊 Speaker On':'🔇 Speaker Off';
-}
-window.toggleMute=async()=>{
-  if(!voiceEnabled||!voiceStream)return;
-  voiceMuted=!voiceMuted;
-  voiceStream.getAudioTracks().forEach(t=>t.enabled=!voiceMuted);
-  try{await setLocalVoiceState(true,voiceMuted,voiceSessionId)}catch(e){console.warn('mute state',e)}
-  updateVoicePlayerList();
-};
-window.toggleSpeaker=()=>{
-  if(!voiceEnabled)return;
-  voiceSpeakerOn=!voiceSpeakerOn;
-  applySpeakerState();
-  updateVoicePlayerList();
-};
-async function cleanupVoice(){
-  voiceChanging=true;
-  const room=onlineRoom,currentUid=uid;
-  voiceEnabled=false;voiceMuted=false;voiceSpeakerOn=true;
-  clearVoiceSignalListeners();
-  try{if(room&&currentUid)await update(ref(db,'rooms/'+room+'/players/'+currentUid),{voiceEnabled:false,muted:false,voiceSessionId:null,voicePeerId:null})}catch(e){console.warn('voice off state',e)}
-  for(const remote of [...voicePeers.keys()])await destroyVoicePeer(remote);
-  voicePeers.clear();
-  if(voiceStream){voiceStream.getTracks().forEach(t=>{try{t.stop()}catch(_){}});voiceStream=null}
-  for(const remote of [...voiceAudioElements.keys()])removeRemoteAudio(remote);
-  if(voiceAudioContext){try{await voiceAudioContext.close()}catch(_){}voiceAudioContext=null}
-  voiceBoundRoom=null;voiceSessionId=null;
-  const btn=document.getElementById('voiceBtn');if(btn){btn.textContent='🎤 Enable Voice';btn.classList.remove('off')}
-  const sb=document.getElementById('speakerToggle');if(sb)sb.remove();
-  setVoiceStatus('Voice chat off');
-  voiceChanging=false;
-}
-window.toggleVoice=async()=>{
-  if(!online||!onlineRoom){alert('Voice chat is available only inside an online room.');return}
-  if(voiceChanging)return;
-  if(voiceEnabled){await cleanupVoice();return}
-  voiceChanging=true;
-  const room=onlineRoom;
-  try{
-    if(!navigator.mediaDevices?.getUserMedia)throw new Error('Microphone access is not supported by this browser.');
-    prepareVoiceAudioForRemotes();
-    await unlockVoiceAudio();
-    const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1},video:false});
-    if(room!==onlineRoom){stream.getTracks().forEach(t=>t.stop());throw new Error('The online room changed.')}
-    voiceStream=stream;voiceEnabled=true;voiceMuted=false;voiceSpeakerOn=true;voiceBoundRoom=room;
-    voiceSessionId=Date.now().toString(36)+'_'+Math.random().toString(36).slice(2)+'_'+String(uid).slice(-6);
-    voiceStream.getAudioTracks().forEach(t=>t.enabled=true);
-    await setLocalVoiceState(true,false,voiceSessionId);
-    try{
-      const od=onDisconnect(ref(db,'rooms/'+room+'/players/'+uid));
-      await od.cancel();
-      await od.update({voiceEnabled:false,muted:false,voiceSessionId:null,voicePeerId:null});
-    }catch(e){console.warn('voice onDisconnect',e)}
-    const btn=document.getElementById('voiceBtn');
-    if(btn){btn.textContent='🔇 Disable Voice';btn.classList.add('off')}
-    const panel=document.getElementById('voicePanel');
-    if(panel&&!document.getElementById('speakerToggle')){
-      const sb=document.createElement('button');
-      sb.id='speakerToggle';sb.className='voiceBtn';sb.style.marginTop='6px';sb.style.background='#465066';sb.onclick=toggleSpeaker;sb.textContent='🔊 Speaker On';panel.insertBefore(sb,document.getElementById('voicePlayerList'));
-    }
-    setVoiceStatus('Microphone on • Connecting…');
-    voiceChanging=false;
-    await connectVoicePeers();
-  }catch(e){
-    console.error('Voice start error:',e);
-    if(voiceStream){voiceStream.getTracks().forEach(t=>t.stop());voiceStream=null}
-    voiceEnabled=false;voiceMuted=false;voiceSessionId=null;voiceBoundRoom=null;voiceSpeakerOn=true;
-    try{await setLocalVoiceState(false,false,null)}catch(_){ }
-    voiceChanging=false;
-    const btn=document.getElementById('voiceBtn');if(btn){btn.textContent='🎤 Enable Voice';btn.classList.remove('off')}
-    const sb=document.getElementById('speakerToggle');if(sb)sb.remove();
-    setVoiceStatus('Voice chat off');
-    const n=e?.name||'';let msg='Voice could not start.';
-    if(n==='NotAllowedError'||n==='PermissionDeniedError')msg='Microphone permission was blocked. Allow Microphone for this site, then click Enable Voice again.';
-    else if(n==='NotFoundError')msg='No microphone was found on this device.';
-    else if(n==='NotReadableError')msg='The microphone is busy in another app/browser tab.';
-    else if(e?.message)msg=e.message;
-    alert(msg);
-  }
-};
+async function connectVoicePeer(remoteUid){if(voiceChanging||!voiceEnabled||!voiceStream||!onlineRoom||!uid)return;const remote=(players||[]).find(p=>p.uid===remoteUid);if(!remote||remote.voiceEnabled!==true||!remote.voiceSessionId||!voicePlayerCanHear(remote))return;const existing=voicePeers.get(remoteUid);if(existing&&(existing.connected||existing.pc.connectionState==='connecting'||existing.pc.connectionState==='new'))return;if(existing)await destroyVoicePeer(remoteUid);const initiator=String(uid)<String(remoteUid);setupVoicePeer(remoteUid,initiator,remote.voiceSessionId,voiceSessionId)}
+async function connectVoicePeers(){if(voiceChanging||!voiceEnabled||!voiceStream||!onlineRoom||!uid)return;const remotes=activeRemotePlayers(),wanted=new Set(remotes.map(p=>p.uid));for(const remote of [...voicePeers.keys()])if(!wanted.has(remote))await destroyVoicePeer(remote);for(const p of remotes){try{await connectVoicePeer(p.uid)}catch(_){} }updateVoicePlayerList();const connected=[...voicePeers.values()].filter(e=>e.connected&&e.audioReceived).length;setVoiceStatus(remotes.length&&connected===remotes.length?'Voice connected':remotes.length?'Connecting voice… '+connected+'/'+remotes.length:'Waiting for another player')}
+async function setLocalVoiceState(enabled,muted,session){if(!onlineRoom||!uid)return;await update(ref(db,'rooms/'+onlineRoom+'/players/'+uid),{voiceEnabled:!!enabled,muted:!!muted,voiceSessionId:enabled?(session||voiceSessionId||''):null,voiceMode:enabled?voiceMode:null})}
+function updateVoicePlayerList(){const panel=document.getElementById('voicePlayerList');if(!panel)return;panel.innerHTML=(players||[]).map((p,i)=>{if(!p||!p.uid)return '';const me=p.uid===uid,enabled=p.voiceEnabled===true,remoteMuted=voiceRemoteMutes.get(p.uid)===true;const e=voicePeers.get(p.uid);const connected=e?.connected&&e?.audioReceived;let status=me?(voiceMuted?'🔇 You: Muted':'🎤 You: Unmuted'):(enabled?(connected?'🟢 Connected':'🟡 Connecting'):'⚫ Voice Off');if(!me&&enabled)status+=' '+(remoteMuted?'🔇 Muted':'🔊');const btn=!me&&enabled?' <button class="voiceMiniBtn" onclick="togglePlayerMute(\''+String(p.uid).replace(/[^a-zA-Z0-9_-]/g,'')+'\')">'+(remoteMuted?'Unmute':'Mute')+'</button>':'';return '<div class="voicePlayerItem"><span>'+String(p.name||('Player '+(i+1))).replace(/[<>&"']/g,'')+'</span><span>'+status+btn+'</span></div>'}).join('');const sb=document.getElementById('speakerToggle');if(sb){sb.style.display=voiceEnabled?'block':'none';sb.textContent=voiceSpeakerOn?'🔊 Speaker ON':'🔇 Speaker OFF'}const ms=document.getElementById('voiceModeSelect');if(ms)ms.value=voiceMode}
+window.toggleMute=async()=>{if(!voiceEnabled||!voiceStream)return;voiceMuted=!voiceMuted;voiceStream.getAudioTracks().forEach(t=>t.enabled=!voiceMuted);try{await setLocalVoiceState(true,voiceMuted,voiceSessionId)}catch(_){}updateVoicePlayerList()};
+window.togglePlayerMute=uidValue=>{if(uidValue===uid)return;const next=!voiceRemoteMutes.get(uidValue);voiceRemoteMutes.set(uidValue,next);applyRemoteAudioState(uidValue);updateVoicePlayerList()};
+window.toggleSpeaker=()=>{if(!voiceEnabled)return;voiceSpeakerOn=!voiceSpeakerOn;for(const id of voiceAudioElements.keys())applyRemoteAudioState(id);updateVoicePlayerList()};
+window.changeVoiceMode=async mode=>{if(!['party','proximity','all'].includes(mode))mode='all';voiceMode=mode;try{if(voiceEnabled)await setLocalVoiceState(true,voiceMuted,voiceSessionId)}catch(_){}await connectVoicePeers()};
+async function refreshVoiceDevices(){if(!navigator.mediaDevices?.enumerateDevices)return;try{const devices=await navigator.mediaDevices.enumerateDevices();const ins=document.getElementById('voiceInputSelect'),outs=document.getElementById('voiceOutputSelect');if(ins){const cur=voiceInputDeviceId;ins.innerHTML='<option value="">Default microphone</option>';devices.filter(d=>d.kind==='audioinput').forEach(d=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||'Microphone';ins.appendChild(o)});ins.value=cur||''}if(outs){const cur=voiceOutputDeviceId;outs.innerHTML='<option value="">Default speaker</option>';devices.filter(d=>d.kind==='audiooutput').forEach(d=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||'Speaker';outs.appendChild(o)});outs.value=cur||''}}catch(_){} }
+window.changeVoiceOutput=async deviceId=>{voiceOutputDeviceId=deviceId||'';applyOutputDevice();await refreshVoiceDevices()};
+window.changeVoiceInput=async deviceId=>{if(!voiceEnabled||voiceChanging)return;voiceChanging=true;try{const constraints={audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}};if(deviceId)constraints.audio.deviceId={exact:deviceId};const newStream=await navigator.mediaDevices.getUserMedia(constraints);const newTrack=newStream.getAudioTracks()[0];if(!newTrack)throw new Error('No microphone track found.');const old=voiceStream;voiceStream=newStream;voiceInputDeviceId=deviceId||'';for(const e of voicePeers.values()){const sender=e.pc.getSenders().find(x=>x.track?.kind==='audio');if(sender)await sender.replaceTrack(newTrack)}if(old)old.getTracks().forEach(t=>{try{t.stop()}catch(_){}});newTrack.enabled=!voiceMuted;await refreshVoiceDevices();setVoiceStatus('Microphone changed • Voice connected')}catch(e){alert(e?.message||'Could not change microphone.')}finally{voiceChanging=false;await connectVoicePeers()}};
+async function cleanupVoice(){voiceChanging=true;const room=onlineRoom,currentUid=uid;voiceEnabled=false;voiceMuted=false;voiceSpeakerOn=true;clearVoiceSignalListeners();for(const remote of [...voicePeers.keys()])await destroyVoicePeer(remote);voicePeers.clear();if(voiceStream){voiceStream.getTracks().forEach(t=>{try{t.stop()}catch(_){}});voiceStream=null}for(const remote of [...voiceAudioElements.keys()])removeRemoteAudio(remote);voiceBoundRoom=null;voiceSessionId=null;if(room&&currentUid){try{await update(ref(db,'rooms/'+room+'/players/'+currentUid),{voiceEnabled:false,muted:false,voiceSessionId:null,voiceMode:null})}catch(_){} }const btn=document.getElementById('voiceBtn');if(btn){btn.textContent='🎤 Enable Voice';btn.classList.remove('off')}const sb=document.getElementById('speakerToggle');if(sb)sb.style.display='none';setVoiceStatus('Voice chat off');voiceChanging=false;updateVoicePlayerList()}
+window.toggleVoice=async()=>{if(!online||!onlineRoom){alert('Voice chat is available only inside an online room.');return}if(voiceChanging)return;if(voiceEnabled){await cleanupVoice();return}voiceChanging=true;const room=onlineRoom;try{if(!navigator.mediaDevices?.getUserMedia)throw new Error('Microphone access is not supported by this browser.');await refreshVoiceDevices();const constraints={audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}};if(voiceInputDeviceId)constraints.audio.deviceId={exact:voiceInputDeviceId};const stream=await navigator.mediaDevices.getUserMedia(constraints);if(room!==onlineRoom){stream.getTracks().forEach(t=>t.stop());throw new Error('The online room changed.')}voiceStream=stream;voiceEnabled=true;voiceMuted=false;voiceSpeakerOn=true;voiceBoundRoom=room;voiceSessionId=Date.now().toString(36)+'_'+Math.random().toString(36).slice(2)+'_'+String(uid).slice(-6);stream.getAudioTracks().forEach(t=>t.enabled=true);await setLocalVoiceState(true,false,voiceSessionId);const btn=document.getElementById('voiceBtn');if(btn){btn.textContent='🔇 Disable Voice';btn.classList.add('off')}setVoiceStatus('Microphone ON • Connecting…');voiceChanging=false;await refreshVoiceDevices();await connectVoicePeers();applyOutputDevice();updateVoicePlayerList()}catch(e){console.error('Voice start error',e);if(voiceStream){voiceStream.getTracks().forEach(t=>{try{t.stop()}catch(_){}});voiceStream=null}voiceEnabled=false;voiceMuted=false;voiceSessionId=null;voiceBoundRoom=null;voiceSpeakerOn=true;try{await setLocalVoiceState(false,false,null)}catch(_){}voiceChanging=false;const btn=document.getElementById('voiceBtn');if(btn){btn.textContent='🎤 Enable Voice';btn.classList.remove('off')}setVoiceStatus('Voice chat off');const n=e?.name||'';let msg='Voice could not start.';if(n==='NotAllowedError'||n==='PermissionDeniedError')msg='Microphone permission was blocked. Allow microphone access and try again.';else if(n==='NotFoundError')msg='No microphone was found.';else if(n==='NotReadableError')msg='The microphone is busy in another app/tab.';else if(e?.message)msg=e.message;alert(msg)}};
 function refreshVoiceForPlayers(){ensureVoicePanel();updateVoicePlayerList();if(!voiceChanging&&voiceEnabled&&voiceBoundRoom===onlineRoom)connectVoicePeers()}
-
 window.leaveRoom=async()=>{
+  if(firebaseConnUnsub){try{firebaseConnUnsub()}catch(_){}firebaseConnUnsub=null;}
   await cleanupVoice();
   try{
     if(gameUnsub){gameUnsub();gameUnsub=null;}
