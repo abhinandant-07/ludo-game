@@ -2131,7 +2131,7 @@ function backToMenu() {
 
 </script>
 
-<script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
@@ -2526,11 +2526,7 @@ function voiceIceConfig(){
   };
 }
 
-function voicePeerIdForSession(){
-  const base='ludo_'+String(uid||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,28);
-  const sess=String(voiceSessionId||'x').replace(/[^A-Za-z0-9_-]/g,'').slice(-24);
-  return (base+'_'+sess).slice(0,63);
-}
+function voicePeerIdForSession(){ return null; }
 
 async function destroyVoicePeer(remoteUid,removeMap=true){
   const entry=voicePeers.get(remoteUid);
@@ -2564,7 +2560,7 @@ async function createVoicePeer(remoteUid,force=false){
   /* The smaller UID initiates the call so each pair has one caller. */
   const initiator=String(uid)<String(remoteUid);
   const call=initiator ? window.voicePeer.call(remote.voicePeerId,voiceStream,{metadata:{room:onlineRoom,from:uid,session:voiceSessionId}}) : null;
-  const entry={call:null,remoteUid,reconnectTimer:null};
+  const entry={call:null,remoteUid,reconnectTimer:null,connected:false};
   voicePeers.set(remoteUid,entry);
 
   if(!call){
@@ -2572,10 +2568,20 @@ async function createVoicePeer(remoteUid,force=false){
     return null;
   }
   entry.call=call;
-  call.on('stream',stream=>addRemoteAudio(remoteUid,stream));
-  call.on('close',()=>{removeRemoteAudio(remoteUid);updateVoicePlayerList();scheduleVoicePeerReconnect(remoteUid)});
-  call.on('error',err=>{console.warn('PeerJS media error',err);updateVoicePlayerList();scheduleVoicePeerReconnect(remoteUid)});
-  call.on('open',()=>{updateVoicePlayerList();setVoiceStatus('Voice connected')});
+  call.on('stream',stream=>{
+    entry.connected=true;
+    addRemoteAudio(remoteUid,stream);
+    updateVoicePlayerList();
+    setVoiceStatus('Voice connected');
+  });
+  call.on('close',()=>{entry.connected=false;removeRemoteAudio(remoteUid);updateVoicePlayerList();scheduleVoicePeerReconnect(remoteUid)});
+  call.on('error',err=>{entry.connected=false;console.warn('PeerJS media error',err);updateVoicePlayerList();scheduleVoicePeerReconnect(remoteUid)});
+  try{call.peerConnection?.addEventListener('connectionstatechange',()=>{
+    const st=call.peerConnection.connectionState;
+    if(st==='connected'){entry.connected=true;setVoiceStatus('Voice connected')}
+    else if(st==='failed'||st==='disconnected'||st==='closed')entry.connected=false;
+    updateVoicePlayerList();
+  })}catch(_){ }
   updateVoicePlayerList();
   return call;
 }
@@ -2583,12 +2589,13 @@ async function createVoicePeer(remoteUid,force=false){
 function setupVoicePeerServer(){
   if(!voiceEnabled||!voiceStream||!window.Peer)return;
   if(window.voicePeer && !window.voicePeer.destroyed)return;
-  const peerId=voicePeerIdForSession();
   try{
-    const peer=new window.Peer(peerId,{host:'0.peerjs.com',port:443,path:'/',secure:true,debug:1,config:voiceIceConfig()});
+    /* Let PeerJS Cloud assign the peer id. This avoids custom-id collisions and
+       avoids depending on a particular cloud path configuration. */
+    const peer=new window.Peer({debug:2,config:voiceIceConfig()});
     window.voicePeer=peer;
     peer.on('open',async()=>{
-      if(!voiceEnabled||voicePeer!==peer)return;
+      if(!voiceEnabled||window.voicePeer!==peer)return;
       try{await setLocalVoiceState(true,voiceMuted,voiceSessionId,peer.id)}catch(e){console.warn('voice peer state',e)}
       setVoiceStatus('Voice ready • Connecting…');
       await connectVoicePeers();
@@ -2600,12 +2607,23 @@ function setupVoicePeerServer(){
       if(!remoteUid||!remote){try{call.close()}catch(_){};return;}
       const old=voicePeers.get(remoteUid);
       if(old&&old.call&&old.call!==call)try{old.call.close()}catch(_){}
-      const entry={call,remoteUid,reconnectTimer:null};
+      const entry={call,remoteUid,reconnectTimer:null,connected:false};
       voicePeers.set(remoteUid,entry);
       call.answer(voiceStream);
-      call.on('stream',stream=>addRemoteAudio(remoteUid,stream));
-      call.on('close',()=>{removeRemoteAudio(remoteUid);updateVoicePlayerList();scheduleVoicePeerReconnect(remoteUid)});
-      call.on('error',err=>{console.warn('PeerJS incoming media error',err);updateVoicePlayerList();scheduleVoicePeerReconnect(remoteUid)});
+      call.on('stream',stream=>{
+        entry.connected=true;
+        addRemoteAudio(remoteUid,stream);
+        updateVoicePlayerList();
+        setVoiceStatus('Voice connected');
+      });
+      call.on('close',()=>{entry.connected=false;removeRemoteAudio(remoteUid);updateVoicePlayerList();scheduleVoicePeerReconnect(remoteUid)});
+      call.on('error',err=>{entry.connected=false;console.warn('PeerJS incoming media error',err);updateVoicePlayerList();scheduleVoicePeerReconnect(remoteUid)});
+      try{call.peerConnection?.addEventListener('connectionstatechange',()=>{
+        const st=call.peerConnection.connectionState;
+        if(st==='connected'){entry.connected=true;setVoiceStatus('Voice connected')}
+        else if(st==='failed'||st==='disconnected'||st==='closed')entry.connected=false;
+        updateVoicePlayerList();
+      })}catch(_){ }
       updateVoicePlayerList();
     });
     peer.on('disconnected',()=>{
@@ -2646,7 +2664,7 @@ async function connectVoicePeers(){
       try{await createVoicePeer(p.uid)}catch(e){console.warn('PeerJS voice peer',e)}
     }
   }
-  const connected=[...voicePeers.values()].filter(e=>e.call?.open).length;
+  const connected=[...voicePeers.values()].filter(e=>e.connected===true || e.call?.open===true).length;
   if(connected===remotes.length)setVoiceStatus('Voice connected');
   else setVoiceStatus('Connecting voice… '+connected+'/'+remotes.length);
   updateVoicePlayerList();
@@ -2661,7 +2679,7 @@ function updateVoicePlayerList(){
   const panel=document.getElementById('voicePlayerList'); if(!panel)return;
   panel.innerHTML=(players||[]).map((p,i)=>{
     const isMe=p.uid===uid, enabled=p.voiceEnabled===true, muted=p.muted===true;
-    const state=voicePeers.get(p.uid)?.call?.open?'connected':(voicePeers.get(p.uid)?.call?'connecting':null);
+    const ve=voicePeers.get(p.uid); const state=ve?.connected===true || ve?.call?.open===true?'connected':(ve?.call?'connecting':null);
     let status=enabled?(muted?'🔇 Muted':'🎤 Unmuted'):'🎤 Off';
     if(enabled&&!isMe){
       if(state==='connected')status+=' • 🔊 Connected';
