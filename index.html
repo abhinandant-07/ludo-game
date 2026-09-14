@@ -2131,6 +2131,7 @@ function backToMenu() {
 
 </script>
 
+<script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js";
@@ -2248,12 +2249,12 @@ window.startOnlineGame=async()=>{
     if(!r||r.hostId!==uid)return;
     const ps=Object.values(r.players||{}).filter(p=>p.connected!==false&&p.color);
     if(ps.length<2){alert('At least 2 connected players with colors are required.');return;}
-    const gamePlayers=ps.map(p=>({uid:p.uid,name:p.name,color:p.color,tokens:[-1,-1,-1,-1],voiceEnabled:p.voiceEnabled===true,muted:p.muted===true,voiceSessionId:p.voiceSessionId||null}));
+    const gamePlayers=ps.map(p=>({uid:p.uid,name:p.name,color:p.color,tokens:[-1,-1,-1,-1],voiceEnabled:p.voiceEnabled===true,muted:p.muted===true,voiceSessionId:p.voiceSessionId||null,voicePeerId:p.voicePeerId||null}));
     const tx=await runTransaction(roomRef(),cur=>{
       if(!cur||cur.status!=='waiting'||cur.hostId!==uid)return;
       const live=Object.values(cur.players||{}).filter(p=>p.connected!==false&&p.color);
       if(live.length<2)return;
-      const gp=live.map(p=>({uid:p.uid,name:p.name,color:p.color,tokens:[-1,-1,-1,-1],voiceEnabled:p.voiceEnabled===true,muted:p.muted===true,voiceSessionId:p.voiceSessionId||null}));
+      const gp=live.map(p=>({uid:p.uid,name:p.name,color:p.color,tokens:[-1,-1,-1,-1],voiceEnabled:p.voiceEnabled===true,muted:p.muted===true,voiceSessionId:p.voiceSessionId||null,voicePeerId:p.voicePeerId||null}));
       return {...cur,status:'playing',game:{players:gp,currentPlayer:0,diceValue:1,phase:'roll',winner:null}};
     });
     if(!tx.committed){alert('Only the host can start the game, and at least 2 connected colored players are required.');return;}
@@ -2267,7 +2268,7 @@ function mergeRoomVoiceState(roomPlayers){
     return {...p,
       voiceEnabled:rp.voiceEnabled===true,
       muted:rp.muted===true,
-      voiceSessionId:rp.voiceSessionId||null
+      voiceSessionId:rp.voiceSessionId||null,voicePeerId:rp.voicePeerId||null
     };
   });
   updateVoicePlayerList();
@@ -2506,48 +2507,8 @@ async function addRemoteAudio(peerUid,stream){
   audio.play().catch(()=>{});
 }
 
-function voiceSignalInfo(remoteUid){
-  const remote=(players||[]).find(p=>p.uid===remoteUid);
-  if(!remote||remote.voiceEnabled!==true||!onlineRoom)return null;
-  const pair=voicePair(uid,remoteUid);
-  const initiatorUid=String(uid)<String(remoteUid)?String(uid):String(remoteUid);
-  const initiatorSession=initiatorUid===String(uid)?voiceSessionId:(remote.voiceSessionId||null);
-  if(!initiatorSession)return null;
-  const key=initiatorUid+'_'+initiatorSession;
-  const path='rooms/'+onlineRoom+'/players/'+initiatorUid+'/voiceSignal/'+key;
-  return {pair,key,path,ref:ref(db,path),initiatorUid,initiatorSession};
-}
-
-async function destroyVoicePeer(remoteUid,removeMap=true){
-  const entry=voicePeers.get(remoteUid);
-  if(entry){
-    try{entry.unsubs?.forEach(fn=>fn&&fn())}catch(_){}
-    try{if(entry.pc){entry.pc.ontrack=null;entry.pc.onicecandidate=null;entry.pc.close()}}catch(_){}
-    if(removeMap)voicePeers.delete(remoteUid);
-  }
-  removeRemoteAudio(remoteUid);
-}
-
-async function createVoicePeer(remoteUid,force=false){
-  if(voiceChanging||!voiceEnabled||!voiceStream||!onlineRoom||!uid||!remoteUid)return null;
-  const remote=(players||[]).find(p=>p.uid===remoteUid);
-  if(!remote||remote.voiceEnabled!==true)return null;
-  const info=voiceSignalInfo(remoteUid);
-  if(!info)return null;
-
-  const existing=voicePeers.get(remoteUid);
-  if(existing?.pc && !force && existing.signalKey===info.key &&
-     !['failed','closed'].includes(existing.pc.connectionState))return existing.pc;
-  if(existing)await destroyVoicePeer(remoteUid);
-
-  const initiator=info.initiatorUid===String(uid);
-  /*
-    ICE configuration:
-    - STUN gives the fastest direct path.
-    - TURN is a relay fallback when the two devices are on restrictive/mobile networks.
-    - The public TURN entries are a testing fallback; use your own TURN credentials for production.
-  */
-  const pc=new RTCPeerConnection({
+function voiceIceConfig(){
+  return {
     iceServers:[
       {urls:'stun:stun.l.google.com:19302'},
       {urls:'stun:stun1.l.google.com:19302'},
@@ -2555,165 +2516,152 @@ async function createVoicePeer(remoteUid,force=false){
       {urls:'stun:stun3.l.google.com:19302'},
       {urls:'stun:stun4.l.google.com:19302'},
       {urls:'stun:stun.cloudflare.com:3478'},
-      {
-        urls:'turn:openrelay.metered.ca:80',
-        username:'openrelayproject',
-        credential:'openrelayproject'
-      },
-      {
-        urls:'turn:openrelay.metered.ca:443',
-        username:'openrelayproject',
-        credential:'openrelayproject'
-      },
-      {
-        urls:'turn:openrelay.metered.ca:443?transport=tcp',
-        username:'openrelayproject',
-        credential:'openrelayproject'
-      }
+      {urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},
+      {urls:'turn:openrelay.metered.ca:443',username:'openrelayproject',credential:'openrelayproject'},
+      {urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}
     ],
     iceTransportPolicy:'all',
-    iceCandidatePoolSize:10,
     bundlePolicy:'max-bundle',
     rtcpMuxPolicy:'require'
-  });
-  const entry={pc,remoteUid,signalKey:info.key,queue:[],seen:new Set(),unsubs:[],reconnectTimer:null};
+  };
+}
+
+function voicePeerIdForSession(){
+  const base='ludo_'+String(uid||'').replace(/[^A-Za-z0-9_-]/g,'').slice(0,28);
+  const sess=String(voiceSessionId||'x').replace(/[^A-Za-z0-9_-]/g,'').slice(-24);
+  return (base+'_'+sess).slice(0,63);
+}
+
+async function destroyVoicePeer(remoteUid,removeMap=true){
+  const entry=voicePeers.get(remoteUid);
+  if(entry){
+    try{entry.call?.close()}catch(_){}
+    try{entry.call?.peerConnection?.close?.()}catch(_){}
+    if(entry.reconnectTimer)clearTimeout(entry.reconnectTimer);
+  }
+  removeRemoteAudio(remoteUid);
+  if(removeMap)voicePeers.delete(remoteUid);
+}
+
+function scheduleVoicePeerReconnect(remoteUid){
+  const entry=voicePeers.get(remoteUid);
+  if(!entry||entry.reconnectTimer||voiceChanging||!voiceEnabled)return;
+  entry.reconnectTimer=setTimeout(async()=>{
+    entry.reconnectTimer=null;
+    if(!voiceEnabled||voiceChanging||voicePeers.get(remoteUid)!==entry)return;
+    try{await createVoicePeer(remoteUid,true)}catch(e){console.warn('PeerJS voice reconnect',e)}
+  },1200);
+}
+
+async function createVoicePeer(remoteUid,force=false){
+  if(voiceChanging||!voiceEnabled||!voiceStream||!onlineRoom||!uid||!window.Peer)return null;
+  const remote=(players||[]).find(p=>p.uid===remoteUid);
+  if(!remote||remote.voiceEnabled!==true||!remote.voicePeerId)return null;
+  const existing=voicePeers.get(remoteUid);
+  if(existing?.call && !force && ['open','connecting'].includes(existing.call.open?'open':'connecting'))return existing.call;
+  if(existing)await destroyVoicePeer(remoteUid);
+
+  /* The smaller UID initiates the call so each pair has one caller. */
+  const initiator=String(uid)<String(remoteUid);
+  const call=initiator ? window.voicePeer.call(remote.voicePeerId,voiceStream,{metadata:{room:onlineRoom,from:uid,session:voiceSessionId}}) : null;
+  const entry={call:null,remoteUid,reconnectTimer:null};
   voicePeers.set(remoteUid,entry);
 
-  for(const track of voiceStream.getAudioTracks())pc.addTrack(track,voiceStream);
-
-  pc.ontrack=e=>{
-    const stream=e.streams?.[0]||new MediaStream([e.track]);
-    addRemoteAudio(remoteUid,stream);
-  };
-  const rebuild=()=>{
-    if(voiceChanging||!voiceEnabled)return;
-    if(entry.reconnectTimer)return;
-    entry.reconnectTimer=setTimeout(async()=>{
-      entry.reconnectTimer=null;
-      if(voicePeers.get(remoteUid)!==entry)return;
-      try{await createVoicePeer(remoteUid,true); await connectVoicePeers()}catch(e){console.warn('voice reconnect',e)}
-    },1200);
-  };
-  pc.onconnectionstatechange=()=>{
-    const st=pc.connectionState;
-    updateVoicePlayerList();
-    const total=activeRemotePlayers().length;
-    const connected=[...voicePeers.values()].filter(e=>e.pc?.connectionState==='connected').length;
-    if(st==='connected'){
-      setVoiceStatus(total>0 && connected===total ? 'Voice connected' : 'Voice connected • '+connected+'/'+total);
-    }else if(st==='connecting'||st==='new'){
-      setVoiceStatus('Connecting voice… '+connected+'/'+total);
-    }else if(st==='failed'||st==='disconnected')rebuild();
-  };
-  pc.oniceconnectionstatechange=()=>{
-    const st=pc.iceConnectionState;
-    if(st==='failed'||st==='disconnected')rebuild();
-  };
-  /*
-    IMPORTANT:
-    Keep each signaling write inside that user's own /players/$uid node.
-    This avoids Firebase rules blocking the answer/candidate writes when
-    the room only allows a player to write to their own player record.
-  */
-  const localSignalPath='rooms/'+onlineRoom+'/players/'+uid+'/voiceSignal/'+info.key;
-  const remoteSignalPath='rooms/'+onlineRoom+'/players/'+remoteUid+'/voiceSignal/'+info.key;
-  const initiatorSignalPath='rooms/'+onlineRoom+'/players/'+info.initiatorUid+'/voiceSignal/'+info.key;
-  const answerSignalPath=initiator?remoteSignalPath:localSignalPath;
-
-  pc.onicecandidate=async e=>{
-    if(!e.candidate||voicePeers.get(remoteUid)!==entry)return;
-    try{
-      await set(push(ref(db,localSignalPath+'/candidates/'+uid)),e.candidate.toJSON());
-    }catch(err){console.warn('voice ICE write',err)}
-  };
-
-  const offerRef=ref(db,initiatorSignalPath+'/offer');
-  const answerRef=ref(db,answerSignalPath+'/answer');
-  const remoteCandidatesRef=ref(db,remoteSignalPath+'/candidates/'+remoteUid);
-
-  const addCandidate=async c=>{
-    if(!c||voicePeers.get(remoteUid)!==entry)return;
-    if(!pc.remoteDescription){entry.queue.push(c);return;}
-    try{await pc.addIceCandidate(new RTCIceCandidate(c))}catch(e){console.warn('voice ICE add',e)}
-  };
-
-  const offerUnsub=onValue(offerRef,async snap=>{
-    if(initiator||voicePeers.get(remoteUid)!==entry)return;
-    const offer=snap.val();
-    if(!offer||offer.session!==info.initiatorSession||pc.currentRemoteDescription)return;
-    try{
-      await pc.setRemoteDescription(new RTCSessionDescription({type:offer.type,sdp:offer.sdp}));
-      for(const c of entry.queue.splice(0))await addCandidate(c);
-      if(pc.signalingState!=='stable')return;
-      const answer=await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      await set(answerRef,{type:answer.type,sdp:answer.sdp,session:info.initiatorSession,from:uid});
-    }catch(e){console.warn('voice offer',e);rebuild()}
-  });
-
-  const answerUnsub=onValue(answerRef,async snap=>{
-    if(!initiator||voicePeers.get(remoteUid)!==entry)return;
-    const answer=snap.val();
-    if(!answer||answer.session!==info.initiatorSession||pc.currentRemoteDescription)return;
-    if(pc.signalingState!=='have-local-offer')return;
-    try{
-      await pc.setRemoteDescription(new RTCSessionDescription({type:answer.type,sdp:answer.sdp}));
-      for(const c of entry.queue.splice(0))await addCandidate(c);
-    }catch(e){console.warn('voice answer',e);rebuild()}
-  });
-
-  const candidateUnsub=onValue(remoteCandidatesRef,async snap=>{
-    const data=snap.val()||{};
-    for(const [key,c] of Object.entries(data)){
-      if(entry.seen.has(key))continue;
-      entry.seen.add(key); await addCandidate(c);
-    }
-  });
-  entry.unsubs=[offerUnsub,answerUnsub,candidateUnsub];
-
-  if(initiator){
-    try{
-      const offer=await pc.createOffer({offerToReceiveAudio:true});
-      await pc.setLocalDescription(offer);
-      await set(offerRef,{type:offer.type,sdp:offer.sdp,session:info.initiatorSession,from:uid});
-    }catch(e){console.warn('voice offer create',e);rebuild()}
+  if(!call){
+    /* The remote side will call us; its incoming-call handler owns the answer. */
+    return null;
   }
-  return pc;
+  entry.call=call;
+  call.on('stream',stream=>addRemoteAudio(remoteUid,stream));
+  call.on('close',()=>{removeRemoteAudio(remoteUid);updateVoicePlayerList();scheduleVoicePeerReconnect(remoteUid)});
+  call.on('error',err=>{console.warn('PeerJS media error',err);updateVoicePlayerList();scheduleVoicePeerReconnect(remoteUid)});
+  call.on('open',()=>{updateVoicePlayerList();setVoiceStatus('Voice connected')});
+  updateVoicePlayerList();
+  return call;
+}
+
+function setupVoicePeerServer(){
+  if(!voiceEnabled||!voiceStream||!window.Peer)return;
+  if(window.voicePeer && !window.voicePeer.destroyed)return;
+  const peerId=voicePeerIdForSession();
+  try{
+    const peer=new window.Peer(peerId,{host:'0.peerjs.com',port:443,path:'/',secure:true,debug:1,config:voiceIceConfig()});
+    window.voicePeer=peer;
+    peer.on('open',async()=>{
+      if(!voiceEnabled||voicePeer!==peer)return;
+      try{await setLocalVoiceState(true,voiceMuted,voiceSessionId,peer.id)}catch(e){console.warn('voice peer state',e)}
+      setVoiceStatus('Voice ready • Connecting…');
+      await connectVoicePeers();
+    });
+    peer.on('call',call=>{
+      if(!voiceEnabled||!voiceStream){try{call.close()}catch(_){};return;}
+      const remoteUid=String(call.metadata?.from||'');
+      const remote=(players||[]).find(p=>p.uid===remoteUid);
+      if(!remoteUid||!remote){try{call.close()}catch(_){};return;}
+      const old=voicePeers.get(remoteUid);
+      if(old&&old.call&&old.call!==call)try{old.call.close()}catch(_){}
+      const entry={call,remoteUid,reconnectTimer:null};
+      voicePeers.set(remoteUid,entry);
+      call.answer(voiceStream);
+      call.on('stream',stream=>addRemoteAudio(remoteUid,stream));
+      call.on('close',()=>{removeRemoteAudio(remoteUid);updateVoicePlayerList();scheduleVoicePeerReconnect(remoteUid)});
+      call.on('error',err=>{console.warn('PeerJS incoming media error',err);updateVoicePlayerList();scheduleVoicePeerReconnect(remoteUid)});
+      updateVoicePlayerList();
+    });
+    peer.on('disconnected',()=>{
+      if(!voiceEnabled)return;
+      setVoiceStatus('Voice server reconnecting…');
+      setTimeout(()=>{try{if(window.voicePeer===peer&&!peer.destroyed)peer.reconnect()}catch(e){console.warn('PeerJS reconnect',e)}},1000);
+    });
+    peer.on('error',err=>{
+      console.warn('PeerJS error',err);
+      const type=err?.type||'';
+      if(type==='unavailable-id'){
+        try{peer.destroy()}catch(_){}
+        if(window.voicePeer===peer)window.voicePeer=null;
+        setTimeout(()=>{if(voiceEnabled&&!voiceChanging)setupVoicePeerServer()},500);
+      }else if(type==='peer-unavailable'){
+        setVoiceStatus('Waiting for the other player…');
+      }else if(type==='network'||type==='server-error'||type==='socket-error'||type==='socket-closed'){
+        setVoiceStatus('Voice server reconnecting…');
+      }else if(type==='webrtc'){
+        setVoiceStatus('Voice connection failed • retrying…');
+      }
+      updateVoicePlayerList();
+    });
+    peer.on('close',()=>{if(window.voicePeer===peer)window.voicePeer=null;updateVoicePlayerList()});
+  }catch(e){console.error('PeerJS start',e);setVoiceStatus('Voice connection failed')}
 }
 
 async function connectVoicePeers(){
-  if(voiceChanging||!voiceEnabled||!voiceStream||!onlineRoom||!uid)return;
+  if(voiceChanging||!voiceEnabled||!voiceStream||!onlineRoom||!uid||!window.Peer)return;
   await unlockVoiceAudio();
-  const remotes=activeRemotePlayers();
+  if(!window.voicePeer || window.voicePeer.destroyed){setupVoicePeerServer();return}
+  const remotes=activeRemotePlayers().filter(p=>p.voicePeerId);
   const wanted=new Set(remotes.map(p=>p.uid));
-
-  for(const [remote,entry] of [...voicePeers]){
-    const info=voiceSignalInfo(remote);
-    if(!wanted.has(remote)||!info||entry.signalKey!==info.key||entry.pc?.connectionState==='closed'){
-      await destroyVoicePeer(remote);
+  for(const remote of [...voicePeers.keys()])if(!wanted.has(remote))await destroyVoicePeer(remote);
+  if(!remotes.length){setVoiceStatus('Waiting for another player to enable voice');updateVoicePlayerList();return}
+  for(const p of remotes){
+    if(String(uid)<String(p.uid)){
+      try{await createVoicePeer(p.uid)}catch(e){console.warn('PeerJS voice peer',e)}
     }
   }
-  for(const p of remotes){
-    try{await createVoicePeer(p.uid)}catch(e){console.warn('voice peer',e)}
-  }
-  const connected=[...voicePeers.values()].filter(e=>e.pc?.connectionState==='connected').length;
-  if(!remotes.length)setVoiceStatus('Waiting for another player to enable voice');
-  else if(connected===remotes.length)setVoiceStatus('Voice connected');
+  const connected=[...voicePeers.values()].filter(e=>e.call?.open).length;
+  if(connected===remotes.length)setVoiceStatus('Voice connected');
   else setVoiceStatus('Connecting voice… '+connected+'/'+remotes.length);
   updateVoicePlayerList();
 }
 
-async function setLocalVoiceState(enabled,muted,session){
+async function setLocalVoiceState(enabled,muted,session,peerId=null){
   if(!onlineRoom||!uid)return;
-  const data={voiceEnabled:!!enabled,muted:!!muted,voiceSessionId:enabled?(session||voiceSessionId||''):null};
+  const data={voiceEnabled:!!enabled,muted:!!muted,voiceSessionId:enabled?(session||voiceSessionId||''):null,voicePeerId:enabled?(peerId||window.voicePeer?.id||null):null};
   await update(ref(db,'rooms/'+onlineRoom+'/players/'+uid),data);
 }
-
 function updateVoicePlayerList(){
   const panel=document.getElementById('voicePlayerList'); if(!panel)return;
   panel.innerHTML=(players||[]).map((p,i)=>{
     const isMe=p.uid===uid, enabled=p.voiceEnabled===true, muted=p.muted===true;
-    const state=voicePeers.get(p.uid)?.pc?.connectionState;
+    const state=voicePeers.get(p.uid)?.call?.open?'connected':(voicePeers.get(p.uid)?.call?'connecting':null);
     let status=enabled?(muted?'🔇 Muted':'🎤 Unmuted'):'🎤 Off';
     if(enabled&&!isMe){
       if(state==='connected')status+=' • 🔊 Connected';
@@ -2737,9 +2685,10 @@ async function cleanupVoice(){
   voiceChanging=true;
   const room=onlineRoom,currentUid=uid;
   voiceEnabled=false; voiceMuted=false;
-  try{if(room&&currentUid)await update(ref(db,'rooms/'+room+'/players/'+currentUid),{voiceEnabled:false,muted:false,voiceSessionId:null})}catch(e){console.warn('voice off state',e)}
+  try{if(room&&currentUid)await update(ref(db,'rooms/'+room+'/players/'+currentUid),{voiceEnabled:false,muted:false,voiceSessionId:null,voicePeerId:null})}catch(e){console.warn('voice off state',e)}
   for(const remote of [...voicePeers.keys()])await destroyVoicePeer(remote);
   voicePeers.clear();
+  if(window.voicePeer){try{window.voicePeer.destroy()}catch(_){} window.voicePeer=null;}
   if(voiceStream){voiceStream.getTracks().forEach(t=>{try{t.stop()}catch(_){}});voiceStream=null;}
   for(const remote of [...voiceAudioNodes.keys()])removeRemoteAudio(remote);
   if(voiceAudioContext){try{await voiceAudioContext.close()}catch(_){} voiceAudioContext=null;}
@@ -2767,22 +2716,22 @@ window.toggleVoice=async()=>{
     voiceStream=stream; voiceEnabled=true; voiceMuted=false; voiceBoundRoom=room;
     voiceSessionId=Date.now().toString(36)+'_'+Math.random().toString(36).slice(2)+'_'+String(uid).slice(-6);
     voiceStream.getAudioTracks().forEach(t=>t.enabled=true);
-    await setLocalVoiceState(true,false,voiceSessionId);
+    await setLocalVoiceState(true,false,voiceSessionId,null);
     try{
       const od=onDisconnect(ref(db,'rooms/'+room+'/players/'+uid));
       await od.cancel();
-      await od.update({voiceEnabled:false,muted:false,voiceSessionId:null});
+      await od.update({voiceEnabled:false,muted:false,voiceSessionId:null,voicePeerId:null});
     }catch(e){console.warn('voice onDisconnect',e)}
     const btn=document.getElementById('voiceBtn');
     if(btn){btn.textContent='🔇 Disable Voice';btn.classList.add('off')}
     setVoiceStatus('Microphone on • Connecting…');
     voiceChanging=false;
-    await connectVoicePeers();
+    setupVoicePeerServer();
   }catch(e){
     console.error('Voice start error:',e);
     if(voiceStream){voiceStream.getTracks().forEach(t=>t.stop());voiceStream=null;}
     voiceEnabled=false;voiceMuted=false;voiceSessionId=null;voiceBoundRoom=null;
-    try{await setLocalVoiceState(false,false,null)}catch(_){ }
+    try{await setLocalVoiceState(false,false,null,null)}catch(_){ }
     voiceChanging=false;
     const btn=document.getElementById('voiceBtn');
     if(btn){btn.textContent='🎤 Enable Voice';btn.classList.remove('off')}
