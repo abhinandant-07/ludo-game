@@ -38,8 +38,22 @@ button,select{font:inherit;color:var(--fg);background:var(--card);border:1px sol
 #roll:disabled{opacity:.45;cursor:default}
 #end{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:9}
 #end[hidden]{display:none}
-#end div{background:var(--card);padding:22px;border-radius:16px;max-width:320px;width:86%;text-align:center}
+#end>div{background:var(--card);padding:22px;border-radius:16px;max-width:320px;width:86%;text-align:center}
 details{font-size:13px}
+#chat{display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+#chat[hidden],#emo[hidden]{display:none}
+#clog{height:110px;overflow:auto;font-size:13px;word-break:break-word}
+#emo{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;font-size:22px;text-align:center}
+#emo span{cursor:pointer;padding:2px;border-radius:6px}
+#emo span:hover{background:var(--bg)}
+#ci{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px;min-width:0}
+#voice button.on{background:#2e9e4f;color:#fff;border-color:#2e9e4f}
+#voice button.mut{background:#e53935;color:#fff;border-color:#e53935}
+.card select{width:100%}
+#tro{font-size:64px;animation:tro 1.2s infinite ease-in-out}
+@keyframes tro{50%{transform:translateY(-12px) rotate(6deg) scale(1.1)}}
+#end>div{animation:pop .45s cubic-bezier(.2,1.4,.4,1)}
+@keyframes pop{from{transform:scale(.4);opacity:0}}
 #lobby{position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:8;padding:12px;overflow:auto}
 #lobby[hidden]{display:none}
 .card{position:relative;background:var(--card);border-radius:16px;padding:20px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:12px}
@@ -63,13 +77,20 @@ details{font-size:13px}
   <button id="dieb" aria-label="Roll dice"><svg id="die" viewBox="0 0 100 100"></svg></button>
   <div style="flex:1"><div id="dcap"></div><button id="roll" style="width:100%">Roll dice</button></div>
 </div>
+<div class="w" id="chat" hidden>
+  <div id="voice" class="row"><button id="vm">🎤 Join voice</button><button id="vs">🔊</button><span id="vst" style="font-size:12px;opacity:.85"></span></div>
+  <div id="clog"></div>
+  <div id="emo" hidden></div>
+  <div class="row"><button id="eb" aria-label="Emoji">😊</button><input id="ci" maxlength="140" placeholder="Message…" style="flex:1"><button id="cs">Send</button></div>
+  <div id="quick" class="row" style="justify-content:space-between"></div>
+</div>
 <div class="w row"><button id="menu" style="flex:1">☰ Menu · Rooms</button><button id="bot" style="display:none">🤖 Bot takes over</button></div>
 <details class="w"><summary>Rules</summary>
 <p>Roll a 6 to bring a pawn out of the yard. A 6, a capture or a pawn reaching home gives another roll. Three 6s in a row lose the turn. Landing on an opponent outside a star or start square sends it back to its yard. Pawns need an exact roll to finish. Optional rule (menu): 3 tries to roll a 6 when no pawn is out. The game ends when all but one player have finished.</p></details>
 <div id="lobby"><div class="card">
 <button id="lx" class="x" aria-label="Close">✕</button>
 <h2>👑 Ludo King</h2>
-<label id="fr" style="display:flex;gap:8px;align-items:center;font-size:13px"><input id="fair" type="checkbox" checked style="width:auto"> Balanced dice — every player gets fair rolls</label>
+<label id="fr" style="display:flex;flex-direction:column;gap:4px;font-size:13px">Dice style<select id="dm"><option value="balanced">Balanced — every player gets equal 6s</option><option value="random">Classic random — like a real die</option><option value="assist">Assist — more 6s while stuck in the yard</option></select></label>
 <label id="tr" style="display:flex;gap:8px;align-items:center;font-size:13px"><input id="t3" type="checkbox" style="width:auto"> Optional rule: 3 tries to roll a 6 when no pawn is out</label>
 <input id="nm" maxlength="14" placeholder="Your name" autocomplete="nickname">
 <div id="vh">
@@ -84,8 +105,10 @@ details{font-size:13px}
 </div>
 <div id="vr" hidden>
   <div>Room code</div><div id="rcode" style="font:800 36px monospace;letter-spacing:6px"></div>
+  <div id="rst" style="font-size:13px;min-height:18px"></div><button id="rr" hidden>Retry now</button>
   <button id="cp">Copy invite link</button>
   <ul id="plist"></ul>
+  <div style="font-size:12px;opacity:.85">Keep this page open until everyone has joined.</div>
   <button id="start" class="pri">Start match</button>
   <div id="wait">Waiting for the host to start…</div>
   <button id="rn">Reconnect now</button>
@@ -93,7 +116,8 @@ details{font-size:13px}
 </div>
 <div id="ls"></div>
 </div></div>
-<div id="end" hidden><div><h2 id="et" style="margin:0 0 8px">Match over</h2><div id="es" style="margin-bottom:14px"></div><button id="again" style="width:100%">Play again</button></div></div>
+<canvas id="cf" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:20"></canvas>
+<div id="end" hidden><div><div id="tro">🏆</div><h2 id="et" style="margin:0 0 8px">Match over</h2><div id="es" style="margin-bottom:14px"></div><button id="again" style="width:100%">Play again</button></div></div>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script>
 const NS='http://www.w3.org/2000/svg',$=id=>document.getElementById(id);
@@ -188,7 +212,7 @@ function buildPawns(){
     const p={i,s:0,g,sc,bob};g.onclick=()=>choose(c,p);$('pl').append(g);return p})});
 }
 function initState(){
-  buildPawns();lastRoll=0;lastBy=null;tries=0;for(const k in bag)delete bag[k];turn=0;roll=0;rolled=false;busy=false;sixes=0;done=[];over=false;
+  buildPawns();lastRoll=0;lastBy=null;tries=0;for(const k in bag)delete bag[k];for(const k in miss)delete miss[k];turn=0;roll=0;rolled=false;busy=false;sixes=0;done=[];over=false;
   $('end').hidden=true;
   $('b').classList.add('nt');layout();void $('b').getBoundingClientRect();$('b').classList.remove('nt');
   msg('Red rolls first — tap Roll dice');ui();
@@ -223,14 +247,26 @@ function drawDie(v,c=curr()){$('die').innerHTML=`<rect x="4" y="4" width="92" he
 /* ---------- turn flow ---------- */
 function userRoll(){const c=curr();if(over||type[c]!='human'||!mine(c))return;if(net&&net.role=='guest'){if(net.conn&&net.conn.open)net.conn.send({t:'roll'});return}doRoll()}
 let rolling=false,dieIv=0,lastRoll=0,lastBy=null;
-let tries=0,fair=true,triesRule=false;const bag={};
+let tries=0,dm='balanced',triesRule=false;const bag={},miss={};
 const ri=n=>{try{const a=new Uint32Array(1);crypto.getRandomValues(a);return Math.floor(a[0]/4294967296*n)}catch(e){return Math.floor(Math.random()*n)}};
-const rnd6=()=>ri(6)+1;
-// Balanced dice: each player draws from their own shuffled bag of 1-6, so every player gets the same number of 6s over time.
+const rnd6=()=>ri(6)+1,rndf=()=>ri(1e6)/1e6;
+/* ---- DICE ODDS (edit here) ----
+   'random'   : real-die style. Relative chance of 1..6 = DICE_WEIGHTS (all equal = 1/6 each).
+   'balanced' : every player draws from their own shuffled set of 1-6 (equal 6s for everyone).
+   'assist'   : like random, but while a player has no pawn out, each missed roll raises the chance of a 6. */
+const DICE_WEIGHTS=[1,1,1,1,1,1];
+const ASSIST={base:1/6,step:.08,max:.5};
+function weighted(w){const t=w.reduce((a,b)=>a+b,0);let x=rndf()*t;for(let i=0;i<6;i++){if((x-=w[i])<0)return i+1}return 6}
 function nextRoll(c){
-  if(!fair)return rnd6();
-  if(!bag[c]||!bag[c].length){const a=[1,2,3,4,5,6];for(let i=5;i>0;i--){const j=ri(i+1);[a[i],a[j]]=[a[j],a[i]]}bag[c]=a}
-  return bag[c].pop();
+  const out=!!(pw[c]&&pw[c].some(p=>p.s>0&&p.s<57));
+  if(out)miss[c]=0;
+  if(dm=='balanced'){
+    if(!bag[c]||!bag[c].length){const a=[1,2,3,4,5,6];for(let i=5;i>0;i--){const j=ri(i+1);[a[i],a[j]]=[a[j],a[i]]}bag[c]=a}
+    return bag[c].pop();
+  }
+  let w=DICE_WEIGHTS;
+  if(dm=='assist'&&!out){const p6=Math.min(ASSIST.max,ASSIST.base+ASSIST.step*(miss[c]||0)),o=(1-p6)/5;w=[o,o,o,o,o,p6]}
+  const v=weighted(w);miss[c]=v==6?0:(miss[c]||0)+1;return v;
 }
 // Visual only: spins random faces, then ALWAYS lands on the authoritative value v.
 function rollAnim(v,cb){
@@ -290,7 +326,7 @@ async function move(c,p){
     if(hit){bonus=true;tone(220,.3,'sawtooth',.2);layout();msg(`⚔️ ${cap(c)} captured ${hit>1?hit+' pawns':'a pawn'} — roll again!`);await wait(450);if(G!=gen)return}
   }
   if(pw[c].every(q=>q.s==57)){
-    done.push(c);bonus=false;
+    done.push(c);bonus=false;confetti(90,2800);
     if(done.length>=act.length-1){return endGame()}
     msg(`👑 ${cap(c)} finished in place ${done.length}!`);
   }
@@ -304,11 +340,12 @@ function hop(p){p.bob.animate([{transform:'translateY(0)'},{transform:'translate
 function endGame(){over=true;busy=true;ui();showEnd()}
 function showEnd(){
   const last=act.find(c=>!done.includes(c)),rank=[...done,last];
-  tone(784,.4,'triangle',.2);
+  [523,659,784,1046,1318].forEach((f,i)=>setTimeout(()=>tone(f,.35,'triangle',.18),i*140));confetti(240,6000);
   const N=c=>esc(nm[c]||cap(c));
   $('et').textContent=`${nm[rank[0]]||cap(rank[0])} wins!`;
   $('es').innerHTML=rank.map((c,i)=>`<div>${i+1}. <b style="color:${C[c]}">${N(c)}</b></div>`).join('');
   $('again').style.display=net&&net.role=='guest'?'none':'';
+  $('end').firstElementChild.style.borderTop='8px solid '+C[rank[0]];
   $('end').hidden=false;
 }
 
@@ -335,13 +372,32 @@ function aiPick(c,L,r){
 }
 
 /* ---------- online (PeerJS: host-authoritative) ---------- */
-// STUN finds a direct path between two internets; the TURN relay is the fallback when a router/carrier blocks direct links.
-const PEER_OPTS={config:{iceServers:[
-  {urls:'stun:stun.l.google.com:19302'},{urls:'stun:global.stun.twilio.com:3478'},
-  {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}
-]}};
-const ls=(k,v)=>{const S=(k=='name'||k=='fair'||k=='tries')?localStorage:sessionStorage;k='ludo_'+k;try{if(v===undefined)return JSON.parse(S.getItem(k));v===null?S.removeItem(k):S.setItem(k,JSON.stringify(v))}catch(e){}return null};
+const ls=(k,v)=>{const S=(k=='name'||k=='dm'||k=='tries'||k=='ps')?localStorage:sessionStorage;k='ludo_'+k;try{if(v===undefined)return JSON.parse(S.getItem(k));v===null?S.removeItem(k):S.setItem(k,JSON.stringify(v))}catch(e){}return null};
 let TOK=ls('tok');if(!TOK)ls('tok',TOK=Math.random().toString(36).slice(2)+Date.now().toString(36));
+/* ---- Matchmaking (signalling) server ----
+   Default: the free public PeerJS cloud (0.peerjs.com). It works for many people but is sometimes slow, down or blocked.
+   For a dependable setup deploy the included peer-server/ folder (free on Render) and put its host below,
+   e.g. PEER_HOST='ludo-peer.onrender.com' -- or open this page once with ?ps=your-host (remembered; invite links carry it). */
+const PEER_HOST='';
+{const q=new URLSearchParams(location.search).get('ps');if(q=='default')ls('ps',null);else if(q&&/^[a-z0-9.-]+$/i.test(q))ls('ps',q)}
+const PS=(ls('ps')||PEER_HOST||'').trim();
+const SRV=PS?{host:PS,port:443,path:'/',secure:true,key:'peerjs'}:{};
+// STUN finds a direct path between two internets. Add your own TURN entry for very strict networks (I could not verify the shared relay below still works).
+const PEER_OPTS=Object.assign({},SRV,{config:{iceServers:[
+  {urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:'stun:stun2.l.google.com:19302'},{urls:'stun:global.stun.twilio.com:3478'},
+  {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}
+]}});
+// Can this device reach the matchmaking server at all? (used to explain failures)
+async function checkServer(){
+  const base=PS?`https://${PS}/`:'https://0.peerjs.com/',ac=new AbortController(),t=setTimeout(()=>ac.abort(),6000);
+  try{const r=await fetch(base+'peerjs/id?ts='+Date.now(),{signal:ac.signal,cache:'no-store'});clearTimeout(t);return r.ok}
+  catch(e){clearTimeout(t);return false}
+}
+function hostState(k,t){
+  if(!net||net.role!='host')return;net.hs=[k,t];
+  $('rst').textContent=({wait:'⏳ ',ok:'✅ ',bad:'❌ '}[k])+t;
+  $('rcode').style.opacity=k=='ok'?1:.45;$('rr').hidden=k!='bad';$('cp').disabled=k!='ok';
+}
 let offc=[],bq=0;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
 const status=t=>$('ls').textContent=t;
@@ -353,12 +409,13 @@ function bc(){if(net&&net.role=='host'&&!bq){bq=1;queueMicrotask(()=>{bq=0;if(ne
 function calcOff(){offc=act.filter(k=>{const t=net.own[k];return t&&t!==net.me&&!net.on[t]})}
 function snap(){
   calcOff();act.forEach(c=>{const n=net.names[net.own[c]];if(n)nm[c]=n});
-  return{t:'snap',act,type,own:net.own,nm,turn,roll,rolled,busy,sixes,done,over,m:lm,off:offc,lr:lastRoll,lb:lastBy,s:act.map(c=>pw[c].map(p=>p.s))};
+  return{t:'snap',act,type,own:net.own,nm,turn,roll,rolled,busy,sixes,done,over,m:lm,off:offc,pids:pidList(),lr:lastRoll,lb:lastBy,s:act.map(c=>pw[c].map(p=>p.s))};
 }
-function sendAll(m){for(const t in net.conns){const c=net.conns[t];if(c&&c.open)c.send(m)}}
+function sendAll(m){if(m.pids){V.roster=m.pids;syncCalls()}
+ for(const t in net.conns){const c=net.conns[t];if(c&&c.open)c.send(m)}}
 function broadcast(){
   if(net.started){sendAll(snap());persist()}
-  else{const m={t:'lobby',code:net.code,p:net.order.map(t=>({n:net.names[t],on:!!net.on[t],me:t==net.me}))};sendAll(m);renderLobby(m);persist()}
+  else{const m={t:'lobby',code:net.code,pids:pidList(),p:net.order.map(t=>({n:net.names[t],on:!!net.on[t],me:t==net.me}))};sendAll(m);renderLobby(m);persist()}
 }
 function persist(){ls('host',{ts:Date.now(),code:net.code,order:net.order,names:net.names,own:net.own,st:net.started?{act,type,nm,turn,done,over,s:act.map(c=>pw[c].map(p=>p.s))}:null})}
 function renderLobby(m){
@@ -367,35 +424,60 @@ function renderLobby(m){
   const h=net.role=='host';$('start').style.display=h&&!net.started?'':'none';$('start').disabled=m.p.length<2;
   $('wait').style.display=h||net.started?'none':'';$('rn').style.display=h?'none':'';
 }
-function roomView(){$('lobby').hidden=false;$('fr').style.display=$('tr').style.display=net&&net.role=='guest'?'none':'flex';$('vh').hidden=!!net;$('vr').hidden=!net;if(net){$('rc').textContent='Room '+net.code;$('rcode').textContent=net.code;$('start').style.display='none';$('wait').style.display='none';$('rn').style.display=net.role=='guest'?'':'none'}}
+function roomView(){$('lobby').hidden=false;$('fr').style.display=$('tr').style.display=net&&net.role=='guest'?'none':'flex';$('vh').hidden=!!net;$('vr').hidden=!net;if(net){$('rc').textContent='Room '+net.code;$('rcode').textContent=net.code;if(net.role=='host')hostState(...(net.hs||['wait','Registering the room…']));else{$('rst').textContent='';$('rr').hidden=true;$('rcode').style.opacity=1;$('cp').disabled=false};$('start').style.display='none';$('wait').style.display='none';$('rn').style.display=net.role=='guest'?'':'none'}}
 function endOnline(){
   net=null;try{peer&&peer.destroy()}catch(e){}peer=null;
-  ls('host',null);ls('guest',null);offc=[];$('rc').textContent='';$('bot').style.display='none';
+  ls('host',null);ls('guest',null);offc=[];$('rc').textContent='';$('bot').style.display='none';voiceStop();$('chat').hidden=true;$('clog').innerHTML='';
 }
 function leave(keep){endOnline();setup(4,true);roomView();if(!keep)status('')}
 /* host */
 function hostStart(code,sv){
   if(noLib())return;
   endOnline();
-  net={role:'host',code,me:TOK,own:{},names:{},order:[TOK],on:{},conns:{},started:false};
+  net={role:'host',code,me:TOK,own:{},names:{},order:[TOK],on:{},conns:{},started:false,ready:false,chat:[],ct:{},tn:0,lastOpen:0};
   net.names[TOK]=myName();net.on[TOK]=true;
   if(sv){net.order=sv.order;net.names=Object.assign(sv.names,{[TOK]:myName()});net.own=sv.own||{}}
-  const n0=net;roomView();status('Opening room…');
+  const n0=net,maxT=PS?5:3;$('chat').hidden=false;roomView();status('');
+  hostState('wait','Registering the room with the matchmaking server…');
   n0.hb=setInterval(()=>{if(net!==n0){clearInterval(n0.hb);return}
     for(const t in n0.conns){const c=n0.conns[t];if(c&&n0.on[t]&&t!==TOK&&Date.now()-(c.seen||0)>16000){try{c.close()}catch(e){}drop(c)}}},5000);
   const open=k=>{
     try{peer&&peer.destroy()}catch(e){}
-    peer=new Peer(ID(code),PEER_OPTS);
-    peer.on('open',()=>{if(net!==n0)return;status('Room open — share the code or invite link.');if(sv&&sv.st&&!net.started)restore(sv.st);else broadcast()});
-    peer.on('connection',c=>{c.on('data',d=>onHost(c,d));c.on('close',()=>drop(c))});
-    peer.on('disconnected',()=>{try{peer.reconnect()}catch(e){}});
-    peer.on('error',e=>{
-      if(net!==n0)return;
-      if(e.type=='unavailable-id'&&k<15){status('Waiting for the old room connection to expire…');setTimeout(()=>net===n0&&open(k+1),3000)}
-      else status('Network error: '+e.type)});
+    n0.lastOpen=Date.now();
+    const p=peer=new Peer(ID(code),PEER_OPTS);
+    clearTimeout(n0.rt);
+    n0.rt=setTimeout(async()=>{
+      if(net!==n0||peer!==p||n0.ready)return;
+      const ok=await checkServer();
+      if(net!==n0||peer!==p||n0.ready)return;
+      if(++n0.tn<maxT){hostState('wait',(ok?'Server reachable but slow':'Cannot reach the matchmaking server yet')+` — retrying (${n0.tn+1} of ${maxT})…`);open(0)}
+      else hostState('bad',ok?'The server answered but did not register the room. Tap Retry.':'Cannot reach the matchmaking server from this network. The free public server is sometimes down or blocked — try Wi-Fi ↔ mobile data, tap Retry, or use your own server (see README).');
+    },PS?15000:12000);
+    p.on('open',()=>{
+      if(net!==n0||peer!==p)return;
+      clearTimeout(n0.rt);n0.ready=true;n0.tn=0;
+      hostState('ok','Room is online — friends can join now. Keep this page open until everyone joins.');
+      if(sv&&sv.st&&!n0.started)restore(sv.st);else broadcast()});
+    p.on('connection',c=>{c.on('data',d=>onHost(c,d));c.on('close',()=>drop(c))});
+    p.on('call',onCall);
+    p.on('disconnected',()=>{if(net!==n0||peer!==p)return;n0.ready=false;hostState('wait','Lost the connection to the server — reconnecting…');hostCheck()});
+    p.on('error',e=>{
+      if(net!==n0||peer!==p)return;
+      if(e.type=='unavailable-id'&&k<15){hostState('wait','Waiting for the old room connection to expire…');setTimeout(()=>net===n0&&open(k+1),3000)}
+      else if(e.type!='peer-unavailable'){hostState('wait','Connection problem ('+e.type+') — retrying…');setTimeout(hostCheck,3000)}});
   };
+  n0.reopen=open;
+  n0.ka=setInterval(()=>{if(net!==n0){clearInterval(n0.ka);return}hostCheck()},4000);
   open(0);
 }
+// A room only exists while this page stays registered with the matchmaking server; re-register whenever it drops.
+function hostCheck(){
+  if(!net||net.role!='host')return;
+  if(!peer||peer.destroyed){if(Date.now()-net.lastOpen>10000)net.reopen(0);return}
+  if(peer.disconnected){try{peer.reconnect()}catch(e){net.reopen(0)}}
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)hostCheck()});
+const pidList=()=>[peer&&peer.id].concat(Object.values(net.conns).filter(c=>c&&c.open).map(c=>c.peer)).filter(Boolean);
 function restore(st){
   gen++;act=st.act;type=st.type;nm=st.nm||{};buildPawns();
   act.forEach((c,ci)=>pw[c].forEach((p,i)=>p.s=st.s[ci][i]));
@@ -410,6 +492,7 @@ function startOnline(){
   gen++;act=n==2?['red','yellow']:n==3?['red','green','yellow']:ORDER.slice();
   type={};net.own={};nm={};act.forEach((c,i)=>{type[c]='human';net.own[c]=net.order[i]});
   net.started=true;initState();$('lobby').hidden=true;
+  {const d={t:'chat',n:'🎲',m:'Dice style: '+({balanced:'Balanced',random:'Classic random',assist:'Assist'}[dm]||dm),sys:1};sendAll(d);addChat(d)}
 }
 function onHost(conn,d){
   if(!d||typeof d!='object')return;
@@ -424,7 +507,8 @@ function onHost(conn,d){
     net.names[t]=String(d.name||'Player').slice(0,14);
     const old=net.conns[t];net.conns[t]=conn;conn.tok=t;net.on[t]=true;
     if(old&&old!==conn)try{old.close()}catch(e){}
-    conn.send({t:'hi'});broadcast();if(net.started)ui();
+    conn.send({t:'hi'});net.chat.slice(-20).forEach(m=>conn.send(m));broadcast();if(net.started)ui();
+  }else if(d.t=='chat'&&conn.tok){hostChat(conn.tok,d.m);
   }else if(conn.tok&&net.started&&!over){
     const c=curr();if(net.own[c]!==conn.tok)return;
     if(d.t=='roll'&&type[c]=='human')doRoll();
@@ -448,45 +532,66 @@ function takeover(){
 /* guest */
 function joinRoom(code,re){
   if(noLib())return;
-  code=code.trim().toUpperCase();if(code.length!=5){status('Enter the 5-letter room code.');return}
+  code=code.trim().toUpperCase().replace(/\s+/g,'');
+  if(!/^[A-HJ-NP-Z2-9]{5}$/.test(code)){status('That is not a valid room code. Codes have 5 characters: letters (no I or O) and digits 2–9. Please check it with your friend.');return}
   endOnline();
-  net={role:'guest',code,me:TOK,own:{},conn:null,first:!re,started:false};
-  ls('guest',{code,ts:Date.now()});roomView();gconnect();
+  net={role:'guest',code,me:TOK,own:{},conn:null,first:!re,started:false,att:0};
+  ls('guest',{code,ts:Date.now()});$('chat').hidden=false;roomView();gconnect();
 }
 function gconnect(){
   if(!net||net.role!='guest')return;const n=net;
-  status('Connecting to room '+n.code+'…');
+  n.att++;
+  status(n.first?`Looking for room ${n.code}…${n.att>1?` (try ${n.att} of 6)`:''}`:`Reconnecting to room ${n.code}…`);
   try{peer&&peer.destroy()}catch(e){}
-  peer=new Peer(PEER_OPTS);
-  const retry=()=>{if(net===n){$('rc').textContent='Room '+n.code+' · reconnecting…';status('Connection lost — reconnecting…');setTimeout(()=>net===n&&gconnect(),3000)}};
-  peer.on('open',()=>{
-    const c=peer.connect(ID(n.code),{reliable:true});n.conn=c;
+  const p=peer=new Peer(PEER_OPTS),cur=()=>net===n&&peer===p;
+  const fail=m=>{if(net===n){leave(true);status(m)}};
+  const retry=()=>{if(cur()){$('rc').textContent='Room '+n.code+' · reconnecting…';status('Connection lost — reconnecting…');setTimeout(()=>net===n&&gconnect(),3000)}};
+  clearTimeout(n.to);
+  n.opened=false;
+  n.to=setTimeout(async()=>{if(!cur())return;
+    if(!n.first)return retry();
+    if(!n.opened){const ok=await checkServer();if(!cur())return;
+      return fail(ok?'The matchmaking server answered slowly and the room could not be reached. Please try again.':'Cannot reach the matchmaking server from your network. The free public server is sometimes down or blocked — try Wi-Fi ↔ mobile data, or ask your friend for a link made with their own server (see README).')}
+    fail('Found the room but could not connect to the host. A firewall or network may be blocking direct links — try switching between Wi-Fi and mobile data, then try again.')},PS?70000:25000);
+  p.on('open',()=>{
+    if(!cur())return;
+    n.opened=true;if(n.first)status(`Server reached — finding room ${n.code}…`);
+    const c=p.connect(ID(n.code),{reliable:true});n.conn=c;
     c.on('open',()=>{n.last=Date.now();c.send({t:'hello',tok:TOK,name:myName()});
       const hb=setInterval(()=>{if(net!==n||n.conn!==c){clearInterval(hb);return}
         if(Date.now()-n.last>14000){try{c.close()}catch(e){}clearInterval(hb);return}
         if(c.open)c.send({t:'ping',ts:Date.now()})},4000)});
-    c.on('data',onGuest);c.on('close',retry);c.on('error',retry)});
-  peer.on('error',e=>{
-    if(net!==n)return;
-    if(e.type=='peer-unavailable'&&n.first){leave(true);status('Room not found. Check the code, or ask the host to open the room.')}
-    else retry()});
+    c.on('data',onGuest);c.on('close',()=>{if(cur())retry()});c.on('error',()=>{if(cur())retry()})});
+  p.on('call',onCall);
+  p.on('error',e=>{
+    if(!cur())return;
+    if(e.type=='peer-unavailable'){
+      if(!n.first)return retry();
+      if(n.att<6)return void setTimeout(()=>net===n&&gconnect(),2500);
+      return void checkServer().then(ok=>fail(ok?`Room not found — no room exists with code ${n.code}. The server is reachable, so the code is wrong or the host's page is closed or asleep. Check the code with your friend and try again.`:'Cannot reach the matchmaking server from your network, so the room could not be checked. The free public server is sometimes down or blocked — try Wi-Fi ↔ mobile data and try again.'))}
+    if(['network','server-error','socket-error','socket-closed','browser-incompatible'].includes(e.type))
+      return n.first?fail('Cannot reach the matchmaking server ('+e.type+'). Check your internet connection, or try Wi-Fi ↔ mobile data, and try again.'):retry();
+    retry()});
 }
 function onGuest(d){
   if(!d||!net)return;
   net.last=Date.now();
   if(d.t=='pong'){$('rc').textContent='Room '+net.code+' · '+(Date.now()-d.ts)+' ms';return}
-  if(d.t=='hi'){net.first=false;status('Connected')}
+  if(d.t=='hi'){net.first=false;clearTimeout(net.to);status('Connected')}
   else if(d.t=='err'){leave(true);status(d.m)}
-  else if(d.t=='lobby')renderLobby(d);
+  else if(d.t=='lobby'){V.roster=d.pids||[];syncCalls();renderLobby(d)}
+  else if(d.t=='chat')addChat(d);
   else if(d.t=='die')rollAnim(Math.min(6,Math.max(1,Math.floor(+d.v)||1)));
   else if(d.t=='snap')applySnap(d);
 }
 function applySnap(d){
+  V.roster=d.pids||V.roster;syncCalls();
   if(!Array.isArray(d.act)||!d.act.every(c=>ORDER.includes(c))||!Array.isArray(d.s)||d.s.length!=d.act.length)return;
   const fresh=JSON.stringify(d.act)!=JSON.stringify(act)||!Object.keys(pw).length||!net.started;
   net.started=true;net.own=d.own;
   if(fresh){act=d.act;nm=d.nm;buildPawns();act.forEach((c,ci)=>pw[c].forEach((p,i)=>p.s=d.s[ci][i]));
     $('b').classList.add('nt');layout();void $('b').getBoundingClientRect();$('b').classList.remove('nt');$('lobby').hidden=true}
+  if(!fresh&&d.done.length>done.length&&!d.over)confetti(90,2800);
   type=d.type;nm=d.nm;turn=d.turn;roll=d.roll;rolled=d.rolled;busy=d.busy;sixes=d.sixes;done=d.done;offc=d.off;lastRoll=d.lr;lastBy=d.lb;
   act.forEach((c,ci)=>pw[c].forEach((p,i)=>{const v=d.s[ci][i];
     if(v>p.s){$('pl').append(p.g);void p.g.getBoundingClientRect();hop(p);tone(520,.05)}
@@ -500,6 +605,97 @@ setInterval(()=>{
   const c=curr();
   if(type[c]=='bot'&&!busy&&!rolled&&Date.now()-lastAct>2500)doRoll();
 },1000);
+/* ---------- chat ---------- */
+function addChat(d){
+  const row=document.createElement('div'),b=document.createElement('b');
+  b.textContent=d.n||'Player';b.style.color=C[d.c]||'var(--acc)';
+  row.append(b,document.createTextNode(' '+d.m));if(d.sys)row.style.opacity=.7;
+  const l=$('clog');l.append(row);while(l.children.length>60)l.firstChild.remove();l.scrollTop=l.scrollHeight;
+}
+function hostChat(tok,m){
+  m=String(m||'').replace(/\s+/g,' ').trim().slice(0,140);if(!m)return;
+  const now=Date.now();if(now-(net.ct[tok]||0)<400)return;net.ct[tok]=now;
+  const d={t:'chat',n:net.names[tok]||'Player',c:act.find(k=>net.own[k]==tok),m};
+  net.chat.push(d);if(net.chat.length>40)net.chat.shift();sendAll(d);addChat(d);
+}
+function sendChat(m){
+  m=String(m).trim().slice(0,140);if(!m||!net)return;
+  if(net.role=='host')hostChat(TOK,m);else if(net.conn&&net.conn.open)net.conn.send({t:'chat',m});
+}
+const EMO=[...'😀😂🤣😍😎🤔😢😡😱🥳👍👎👏🙏💪🔥🎉🏆🎲👑😈🤝😴🙌💔⭐😅😜🤯😬😇🥺'];
+$('emo').innerHTML=EMO.map(e=>`<span>${e}</span>`).join('');
+$('emo').onclick=e=>{if(e.target.tagName=='SPAN'){$('ci').value+=e.target.textContent;$('ci').focus()}};
+$('eb').onclick=()=>$('emo').hidden=!$('emo').hidden;
+['👍','😂','😡','👏','🔥','🎉','😭'].forEach(e=>{const b=document.createElement('button');b.textContent=e;b.style.padding='4px 10px';b.onclick=()=>sendChat(e);$('quick').append(b)});
+$('cs').onclick=()=>{sendChat($('ci').value);$('ci').value='';$('emo').hidden=true};
+$('ci').onkeydown=e=>{if(e.key=='Enter')$('cs').click()};
+
+/* ---------- voice (WebRTC audio calls between players, mesh) ---------- */
+const V={on:false,mic:false,spk:true,stream:null,out:{},aud:{},roster:[]};
+const vstat=t=>$('vst').textContent=t||'';
+function vui(){
+  $('vm').textContent=!V.on?'🎤 Join voice':V.mic?'🎤 Mic on':'🎙️ Muted';
+  $('vm').className=!V.on?'':V.mic?'on':'mut';
+  $('vs').textContent=V.spk?'🔊':'🔇';
+}
+async function voiceToggle(){
+  if(!net)return;
+  if(!V.on){
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){vstat('Voice needs a secure (https) page and a supported browser.');return}
+    try{V.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}})}
+    catch(e){vstat('Microphone blocked — allow it in your browser settings, then tap again.');return}
+    V.on=true;V.mic=true;vstat('Voice connected');syncCalls();
+  }else V.mic=!V.mic;
+  V.stream.getAudioTracks().forEach(t=>t.enabled=V.mic);vui();
+}
+function syncCalls(){
+  if(!V.on||!peer||!peer.open)return;
+  for(const id of V.roster){if(id===peer.id||V.out[id])continue;callPeer(id)}
+  for(const id in V.out)if(!V.roster.includes(id)){try{V.out[id].close()}catch(e){}delete V.out[id]}
+}
+function callPeer(id){
+  let c;try{c=peer.call(id,V.stream)}catch(e){return}
+  if(!c)return;V.out[id]=c;
+  c.on('stream',st=>playRemote(id,st));
+  const gone=()=>{if(V.out[id]===c)delete V.out[id]};c.on('close',gone);c.on('error',gone);
+}
+function onCall(c){
+  c.answer(V.on?V.stream:undefined);
+  c.on('stream',st=>playRemote(c.peer,st));
+  c.on('close',()=>{const a=V.aud[c.peer];if(a&&a.__c===c){a.remove();delete V.aud[c.peer]}});
+}
+function playRemote(id,st){
+  let a=V.aud[id];
+  if(!a){a=document.createElement('audio');a.autoplay=true;a.playsInline=true;a.style.display='none';document.body.append(a);V.aud[id]=a}
+  a.srcObject=st;a.muted=!V.spk;
+  const pr=a.play();if(pr&&pr.catch)pr.catch(()=>vstat('Tap 🔊 to hear the voice chat'));
+}
+function voiceStop(){
+  for(const id in V.out){try{V.out[id].close()}catch(e){}}V.out={};
+  for(const id in V.aud)V.aud[id].remove();V.aud={};
+  if(V.stream)V.stream.getTracks().forEach(t=>t.stop());
+  V.stream=null;V.on=false;V.mic=false;V.roster=[];vstat('');vui();
+}
+$('vm').onclick=voiceToggle;
+$('vs').onclick=()=>{V.spk=!V.spk;for(const id in V.aud){V.aud[id].muted=!V.spk;if(V.spk)V.aud[id].play().catch(()=>{})}vstat('');vui()};
+vui();
+
+/* ---------- winning animation ---------- */
+function confetti(n=180,ms=5000){
+  try{
+    const cv=$('cf'),g=cv.getContext&&cv.getContext('2d');if(!g)return;
+    if(window.matchMedia&&matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+    cv.width=innerWidth;cv.height=innerHeight;
+    const cols=[...Object.values(C),'#fff','#ffd54a'],R=Math.random;
+    const ps=Array.from({length:n},()=>({x:R()*cv.width,y:-20-R()*cv.height*.6,w:6+R()*8,h:8+R()*10,vx:R()*3-1.5,vy:2+R()*4,r:R()*6,vr:R()*.4-.2,c:cols[R()*cols.length|0]}));
+    const t0=performance.now();
+    const f=t=>{const el=t-t0;g.clearRect(0,0,cv.width,cv.height);
+      for(const p of ps){p.x+=p.vx;p.y+=p.vy;p.vy+=.03;p.r+=p.vr;g.save();g.translate(p.x,p.y);g.rotate(p.r);g.fillStyle=p.c;g.globalAlpha=Math.max(0,Math.min(1,(ms-el)/800));g.fillRect(-p.w/2,-p.h/2,p.w,p.h);g.restore()}
+      if(el<ms)requestAnimationFrame(f);else g.clearRect(0,0,cv.width,cv.height)};
+    requestAnimationFrame(f);
+  }catch(e){}
+}
+$('rr').onclick=()=>{if(net&&net.role=='host'){net.tn=0;hostState('wait','Registering the room with the matchmaking server…');net.reopen(0)}};
 /* ---------- wiring ---------- */
 $('roll').onclick=userRoll;$('dieb').onclick=userRoll;
 $('again').onclick=()=>{if(net){if(net.role=='host')startOnline()}else setup(...cfg)};
@@ -513,10 +709,10 @@ $('lb').onclick=()=>leave();
 $('bot').onclick=takeover;
 $('menu').onclick=roomView;
 $('lx').onclick=()=>$('lobby').hidden=true;
-fair=ls('fair')!==false;$('fair').checked=fair;$('fair').onchange=()=>{fair=$('fair').checked;ls('fair',fair)};
+dm=ls('dm')||'balanced';$('dm').value=dm;$('dm').onchange=()=>{dm=$('dm').value;ls('dm',dm)};
 triesRule=ls('tries')===true;$('t3').checked=triesRule;$('t3').onchange=()=>{triesRule=$('t3').checked;ls('tries',triesRule)};
 $('nm').value=ls('name')||'';$('nm').onchange=()=>ls('name',$('nm').value.trim());
-$('cp').onclick=async()=>{const u=location.href.split('?')[0].split('#')[0]+'?room='+net.code;
+$('cp').onclick=async()=>{const u=location.href.split('?')[0].split('#')[0]+'?room='+net.code+(PS?'&ps='+encodeURIComponent(PS):'');
   try{await navigator.clipboard.writeText(u);status('Invite link copied')}catch(e){prompt('Copy this invite link',u)}};
 $('snd').onclick=()=>{snd=!snd;$('snd').textContent=snd?'🔊':'🔇'};
 drawBoard();setup(4,true);
