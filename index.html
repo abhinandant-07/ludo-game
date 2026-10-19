@@ -29,7 +29,8 @@ h1{margin:0;font:800 20px Georgia,serif;letter-spacing:.5px}
 .hl{fill:none;stroke:#fff;stroke-width:14;opacity:0;transition:opacity .3s}
 .row{display:flex;gap:10px;align-items:center}
 #dieb{padding:4px;border:2px solid var(--line);border-radius:14px;background:var(--card);cursor:pointer}
-#die{width:64px;height:64px;display:block}
+#die{width:84px;height:84px;display:block;transition:opacity .2s}
+#dcap{font-weight:700;min-height:20px;margin-bottom:6px}
 #die.r{animation:spin .5s}
 @keyframes spin{to{transform:rotate(360deg) scale(1.1)}}
 button,select{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
@@ -57,17 +58,19 @@ details{font-size:13px}
 <div class="w row"><h1>👑 Ludo King</h1><span id="rc" style="flex:1;font-weight:700;color:var(--acc);text-align:center"></span><button id="snd">🔊</button></div>
 <div class="w chips" id="chips"></div>
 <div class="w" id="msg"></div>
-<div class="w"><svg id="b" viewBox="0 0 1500 1500"><g id="bd"></g><g id="pl"></g></svg></div>
+<div class="w"><svg id="b" viewBox="0 0 1500 1500"><g id="bd"></g><g id="gh"></g><g id="pl"></g></svg></div>
 <div class="w row">
   <button id="dieb" aria-label="Roll dice"><svg id="die" viewBox="0 0 100 100"></svg></button>
-  <button id="roll">Roll dice</button>
+  <div style="flex:1"><div id="dcap"></div><button id="roll" style="width:100%">Roll dice</button></div>
 </div>
 <div class="w row"><button id="menu" style="flex:1">☰ Menu · Rooms</button><button id="bot" style="display:none">🤖 Bot takes over</button></div>
 <details class="w"><summary>Rules</summary>
-<p>Roll a 6 to bring a pawn out of the yard. A 6, a capture or a pawn reaching home gives another roll. Three 6s in a row lose the turn. Landing on an opponent outside a star or start square sends it back to its yard. Pawns need an exact roll to finish. The game ends when all but one player have finished.</p></details>
+<p>Roll a 6 to bring a pawn out of the yard. A 6, a capture or a pawn reaching home gives another roll. Three 6s in a row lose the turn. Landing on an opponent outside a star or start square sends it back to its yard. Pawns need an exact roll to finish. Optional rule (menu): 3 tries to roll a 6 when no pawn is out. The game ends when all but one player have finished.</p></details>
 <div id="lobby"><div class="card">
 <button id="lx" class="x" aria-label="Close">✕</button>
 <h2>👑 Ludo King</h2>
+<label id="fr" style="display:flex;gap:8px;align-items:center;font-size:13px"><input id="fair" type="checkbox" checked style="width:auto"> Balanced dice — every player gets fair rolls</label>
+<label id="tr" style="display:flex;gap:8px;align-items:center;font-size:13px"><input id="t3" type="checkbox" style="width:auto"> Optional rule: 3 tries to roll a 6 when no pawn is out</label>
 <input id="nm" maxlength="14" placeholder="Your name" autocomplete="nickname">
 <div id="vh">
   <div class="sec"><b>Play with friends online</b>
@@ -109,6 +112,7 @@ const idx=(c,s)=>(START[c]+s-1)%52;               // step 1..51 -> perimeter ind
 const isSafe=(c,s)=>s<1||s>51||SAFE.includes(idx(c,s));
 const el=(t,a={})=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e};
 const cap=s=>s[0].toUpperCase()+s.slice(1);
+const pname=c=>nm[c]||(type[c]=='bot'?cap(c)+' (computer)':cap(c));
 
 /* ---------- board ---------- */
 function drawBoard(){
@@ -122,20 +126,27 @@ function drawBoard(){
     if((r<6||r>8)&&(q<6||q>8)||(r>5&&r<9&&q>5&&q<9))continue;
     s+=`<rect x="${q*100}" y="${r*100}" width="100" height="100" fill="${col[r+','+q]||'#fff'}" stroke="#8a8478" stroke-width="3"/>`}
   SAFE.forEach(i=>{const[r,q]=P[i],w=!!col[r+','+q];
-    s+=`<text x="${q*100+50}" y="${r*100+72}" font-size="64" text-anchor="middle" fill="${w?'#fff':'#c58b00'}">★</text>`});
+    s+=`<text x="${q*100+50}" y="${r*100+72}" transform="rotate(-90 ${q*100+50} ${r*100+72})" font-size="64" text-anchor="middle" fill="${w?'#fff':'#c58b00'}">★</text>`});
+  const ang={green:0,yellow:90,blue:180,red:-90};
+  for(const c of ORDER)for(let i=0;i<5;i++){const[r,q]=HOME[c](i);s+=`<polygon points="-16,-15 16,0 -16,15" transform="translate(${q*100+50} ${r*100+50}) rotate(${ang[c]})" fill="#fff" opacity=".85"/>`}
   s+=`<polygon points="600,600 900,600 750,750" fill="${C.yellow}"/><polygon points="900,600 900,900 750,750" fill="${C.blue}"/><polygon points="900,900 600,900 750,750" fill="${C.red}"/><polygon points="600,900 600,600 750,750" fill="${C.green}"/><circle cx="750" cy="750" r="26" fill="#fff"/>`;
   for(const c in ORG){const[x,y]=ORG[c];s+=`<rect class="hl" id="hl-${c}" x="${x+7}" y="${y+7}" width="586" height="586"/>`}
-  $('bd').innerHTML=s;
+  $('bd').innerHTML=s;$('bd').setAttribute('transform','rotate(90 750 750)');
   $('chips').innerHTML=ORDER.map(c=>`<div class="chip" id="ch-${c}"><i style="background:${C[c]}"></i><b>${cap(c)}</b><span>0/4</span></div>`).join('');
 }
 
 /* ---------- pawn positions ---------- */
 // feet of the pawn sit at the returned x,y
+// The board group is rotated 90° clockwise (Red top-left, Green top-right, Yellow bottom-right, Blue bottom-left, like Ludo King),
+// so every pawn position is computed in the original grid and rotated the same way.
+const rot=(x,y)=>[1500-y,x];
 function loc(c,p){
-  if(p.s==0){const[ox,oy]=ORG[c];return{k:'y'+c+p.i,x:ox+175+250*(p.i%2),y:oy+200+250*(p.i>>1)}}
-  if(p.s==57){const[x,y]=CEN[c];return{k:'h'+c,x,y:y+15,h:1}}
-  if(p.s<=51){const[r,q]=P[idx(c,p.s)];return{k:'t'+idx(c,p.s),x:q*100+50,y:r*100+75}}
-  const[r,q]=HOME[c](p.s-52);return{k:'r'+c+p.s,x:q*100+50,y:r*100+75}
+  let k,cx,cy,f=25,h=0;
+  if(p.s==0){const[ox,oy]=ORG[c];k='y'+c+p.i;cx=ox+175+250*(p.i%2);cy=oy+175+250*(p.i>>1)}
+  else if(p.s==57){[cx,cy]=CEN[c];k='h'+c;f=15;h=1}
+  else if(p.s<=51){const[r,q]=P[idx(c,p.s)];k='t'+idx(c,p.s);cx=q*100+50;cy=r*100+50}
+  else{const[r,q]=HOME[c](p.s-52);k='r'+c+p.s;cx=q*100+50;cy=r*100+50}
+  const[x,y]=rot(cx,cy);return{k,x,y:y+f,h};
 }
 function layout(){
   const g={};
@@ -144,7 +155,7 @@ function layout(){
     g[k].forEach(([c,p],j)=>{let dx=0,dy=0,sc=1;
       if(n>1&&k[0]!='y'){
         sc=n>2?.62:.75;const o=(j-(n-1)/2)*(n>2?22:32);
-        if(p.L.h&&(c=='green'||c=='blue'))dy=o*1.2;else dx=o}
+        if(p.L.h&&(c=='red'||c=='yellow'))dy=o*1.2;else dx=o}
       p.g.style.transform=`translate(${p.L.x+dx}px,${p.L.y+dy}px)`;
       p.sc.style.transform=`scale(${sc})`})}
   bc();
@@ -152,19 +163,21 @@ function layout(){
 function pawnSVG(col){return `<ellipse cx="0" cy="2" rx="30" ry="10" fill="rgba(0,0,0,.35)"/><path d="M-27,0Q-27,-12-11,-27H11Q27,-12 27,0Z" fill="${col}" stroke="#0008" stroke-width="3"/><ellipse cx="0" cy="-27" rx="15" ry="5" fill="#fff" stroke="#0008" stroke-width="2"/><circle cx="0" cy="-45" r="18" fill="${col}" stroke="#fff" stroke-width="4"/><circle cx="-6" cy="-51" r="6" fill="#fff" opacity=".6"/>`}
 
 /* ---------- state ---------- */
-let nm={},net=null,peer=null,act=[],type={},pw={},turn=0,roll=0,rolled=false,busy=false,sixes=0,done=[],over=false,gen=0,snd=true,AC,cfg=[4,true];
+let nm={},net=null,peer=null,lastAct=0,act=[],type={},pw={},turn=0,roll=0,rolled=false,busy=false,sixes=0,done=[],over=false,gen=0,snd=true,AC,cfg=[4,true];
 const curr=()=>act[turn];
 const later=(f,ms)=>{const g=gen;setTimeout(()=>{if(g==gen)f()},ms)};
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
-let lm='';const msg=t=>{lm=t;$('msg').textContent=t;bc()};
+let lm='';const msg=t=>{lm=t;lastAct=Date.now();$('msg').textContent=t;bc()};
 const mine=c=>!net||net.own[c]===net.me;
 function tone(f,d=.08,t='sine',v=.12){if(!snd)return;try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();o.type=t;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+d)}catch(e){}}
 
 function setup(n,bot){
+  if(net)endOnline();
   gen++;cfg=[n,bot];
   act=n==2?['red','yellow']:n==3?['red','green','yellow']:ORDER.slice();
   type={};act.forEach(c=>type[c]=(!bot||c=='red')?'human':'bot');nm={};
   initState();
+  $('rc').textContent=(bot?'vs Computer':'Pass & Play')+' · '+n+' players';
 }
 function buildPawns(){
   $('pl').innerHTML='';pw={};
@@ -175,7 +188,7 @@ function buildPawns(){
     const p={i,s:0,g,sc,bob};g.onclick=()=>choose(c,p);$('pl').append(g);return p})});
 }
 function initState(){
-  buildPawns();turn=0;roll=0;rolled=false;busy=false;sixes=0;done=[];over=false;
+  buildPawns();lastRoll=0;lastBy=null;tries=0;for(const k in bag)delete bag[k];turn=0;roll=0;rolled=false;busy=false;sixes=0;done=[];over=false;
   $('end').hidden=true;
   $('b').classList.add('nt');layout();void $('b').getBoundingClientRect();$('b').classList.remove('nt');
   msg('Red rolls first — tap Roll dice');ui();
@@ -185,41 +198,66 @@ function legal(c,r){const out=[];let sp=false;
   pw[c].forEach(p=>{if(p.s==0){if(r==6&&!sp){out.push(p);sp=true}}else if(p.s+r<=57)out.push(p)});return out}
 
 function ui(){
+  lastAct=Date.now();
   const c=curr(),h=type[c]=='human';
   ORDER.forEach(k=>{const e=$('ch-'+k),on=act.includes(k);e.style.display=on?'flex':'none';if(!on)return;
-    e.classList.toggle('on',k==c);e.classList.toggle('off',offc.includes(k));e.children[1].textContent=(nm[k]||cap(k))+(net&&net.own[k]===net.me?' (you)':'');e.lastChild.textContent=pw[k].filter(p=>p.s==57).length+'/4';$('hl-'+k).style.opacity=k==c&&!over?1:0});
+    e.classList.toggle('on',k==c);e.classList.toggle('off',offc.includes(k));e.children[1].textContent=(nm[k]||cap(k))+(type[k]=='bot'?' 🤖':'')+(net&&net.own[k]===net.me?' (you)':'');e.lastChild.textContent=pw[k].filter(p=>p.s==57).length+'/4';$('hl-'+k).style.opacity=k==c&&!over?1:0});
   $('roll').disabled=!h||!mine(c)||busy||rolled||over;
-  drawDie(roll||1);
+  if(!rolling)drawDie(lastRoll,lastBy||curr());
   const L=h&&mine(c)&&rolled&&!busy&&!over?legal(c,roll):[];
   pw[c].forEach(p=>p.g.classList.toggle('sel',L.includes(p)||(p.s==0&&L.some(x=>x.s==0))));
   act.filter(k=>k!=c).forEach(k=>pw[k].forEach(p=>p.g.classList.remove('sel')));
+  $('roll').style.visibility=h&&mine(c)&&!over?'visible':'hidden';
+  $('gh').innerHTML=L.map(p=>{const q=loc(c,{s:p.s==0?1:p.s+roll,i:p.i});return `<circle cx="${q.x}" cy="${q.y-25}" r="40" fill="rgba(255,255,255,.4)" stroke="${C[c]}" stroke-width="8" stroke-dasharray="14 10"/>`}).join('');
+  const who=pname(c),can=!$('roll').disabled;
+  $('dcap').textContent=over?'':rolling?`${who} is rolling…`:rolled?`${who} rolled ${roll}`:(h&&mine(c)?`${who}: your turn to roll`:`Waiting for ${who}…`);
+  $('roll').textContent=can?'🎲 Roll dice':(h&&mine(c)?(rolled?`Rolled ${roll}`:'Rolling…'):`${who}'s turn`);
+  $('die').style.opacity=(lastBy&&lastBy!=c&&!rolling&&!rolled)?.45:1;
   if(net&&net.role=='host')calcOff();
   $('bot').style.display=net&&net.role=='host'&&net.started&&offc.length?'':'none';
   bc();
 }
-const PIP={1:[[50,50]],2:[[28,28],[72,72]],3:[[28,28],[50,50],[72,72]],4:[[28,28],[72,28],[28,72],[72,72]],5:[[28,28],[72,28],[50,50],[28,72],[72,72]],6:[[28,26],[72,26],[28,50],[72,50],[28,74],[72,74]]};
-function drawDie(v){$('die').innerHTML=`<rect x="4" y="4" width="92" height="92" rx="18" fill="#fff" stroke="#999" stroke-width="3"/>`+PIP[v].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="9" fill="${C[curr()]}"/>`).join('')}
+const PIP={0:[],1:[[50,50]],2:[[28,28],[72,72]],3:[[28,28],[50,50],[72,72]],4:[[28,28],[72,28],[28,72],[72,72]],5:[[28,28],[72,28],[50,50],[28,72],[72,72]],6:[[28,26],[72,26],[28,50],[72,50],[28,74],[72,74]]};
+function drawDie(v,c=curr()){$('die').innerHTML=`<rect x="4" y="4" width="92" height="92" rx="18" fill="#fff" stroke="${C[c]}" stroke-width="7"/>`+(PIP[v]||[]).map(([x,y])=>`<circle cx="${x}" cy="${y}" r="10" fill="#111"/>`).join('')}
 
 /* ---------- turn flow ---------- */
 function userRoll(){const c=curr();if(over||type[c]!='human'||!mine(c))return;if(net&&net.role=='guest'){if(net.conn&&net.conn.open)net.conn.send({t:'roll'});return}doRoll()}
-function rollAnim(cb){
-  tone(200,.05,'triangle');$('die').classList.add('r');let n=0;
-  const g=gen,iv=setInterval(()=>{
-    if(g!=gen){clearInterval(iv);return}
-    drawDie(1+Math.random()*6|0);tone(150+Math.random()*200,.04,'triangle',.06);
-    if(++n>7){clearInterval(iv);$('die').classList.remove('r');cb&&cb()}},70);
+let rolling=false,dieIv=0,lastRoll=0,lastBy=null;
+let tries=0,fair=true,triesRule=false;const bag={};
+const ri=n=>{try{const a=new Uint32Array(1);crypto.getRandomValues(a);return Math.floor(a[0]/4294967296*n)}catch(e){return Math.floor(Math.random()*n)}};
+const rnd6=()=>ri(6)+1;
+// Balanced dice: each player draws from their own shuffled bag of 1-6, so every player gets the same number of 6s over time.
+function nextRoll(c){
+  if(!fair)return rnd6();
+  if(!bag[c]||!bag[c].length){const a=[1,2,3,4,5,6];for(let i=5;i>0;i--){const j=ri(i+1);[a[i],a[j]]=[a[j],a[i]]}bag[c]=a}
+  return bag[c].pop();
+}
+// Visual only: spins random faces, then ALWAYS lands on the authoritative value v.
+function rollAnim(v,cb){
+  clearInterval(dieIv);rolling=true;const by=curr(),g=gen;let n=0;ui();
+  tone(200,.05,'triangle');$('die').classList.add('r');
+  dieIv=setInterval(()=>{
+    if(g!=gen){clearInterval(dieIv);rolling=false;$('die').classList.remove('r');return}
+    if(++n>7){clearInterval(dieIv);rolling=false;$('die').classList.remove('r');drawDie(v,by);cb&&cb();return}
+    drawDie(1+Math.floor(Math.random()*6),by);tone(150+Math.random()*200,.04,'triangle',.06)},70);
 }
 function doRoll(){
   if(busy||rolled||over)return;
   busy=true;ui();
-  if(net&&net.role=='host')for(const t in net.conns){const c=net.conns[t];if(c&&c.open)c.send({t:'die'})}
-  rollAnim(()=>finishRoll(1+Math.random()*6|0));
+  const v=nextRoll(curr());                         // the host decides the number once...
+  if(net&&net.role=='host')sendAll({t:'die',v});    // ...and tells everyone before the animation starts
+  rollAnim(v,()=>finishRoll(v));
 }
 function finishRoll(r){
-  roll=r;rolled=true;drawDie(r);const c=curr();
+  roll=r;rolled=true;const c=curr();lastRoll=r;lastBy=c;drawDie(r,c);ui();
   if(r==6){sixes++;if(sixes==3){msg(`${cap(c)} rolled three 6s — turn lost`);return later(next,1300)}}else sixes=0;
   const L=legal(c,r);
-  if(!L.length){msg(`${cap(c)} rolled ${r} — no move`);return later(next,1000)}
+  if(!L.length){
+    const onBoard=pw[c].some(p=>p.s>0&&p.s<57);
+    if(triesRule&&!onBoard&&r!=6&&tries<2){
+      tries++;msg(`${pname(c)} rolled ${r} — no 6 yet. ${type[c]=='bot'?'Rolling again':'Roll again'} (${tries+1} of 3)`);
+      return later(()=>{rolled=false;roll=0;busy=false;ui();if(type[c]=='bot'){busy=true;ui();later(()=>{busy=false;doRoll()},500)}},900)}
+    msg(`${cap(c)} rolled ${r} — no move`);return later(next,1000)}
   const bot=type[c]=='bot';
   if(bot||L.length==1){msg(`${cap(c)} rolled ${r}`);return later(()=>move(c,bot?aiPick(c,L,r):L[0]),bot?700:350)}
   busy=false;msg(`${cap(c)} rolled ${r} — tap a glowing pawn`);ui();
@@ -230,15 +268,15 @@ function choose(c,p){
   if(q&&L.includes(q)){if(net&&net.role=='guest'){if(net.conn&&net.conn.open)net.conn.send({t:'pick',i:p.i})}else move(c,q)}
 }
 function next(){
-  rolled=false;roll=0;sixes=0;
+  rolled=false;roll=0;sixes=0;tries=0;
   do{turn=(turn+1)%act.length}while(done.includes(curr()));
   busy=false;const c=curr();
-  msg(type[c]=='human'?`${cap(c)}'s turn — tap Roll dice`:`${cap(c)} (bot) is rolling…`);ui();
+  msg(type[c]=='human'?`${pname(c)}'s turn — tap Roll dice`:`${pname(c)} is rolling…`);ui();
   if(type[c]=='bot'){busy=true;ui();later(()=>{busy=false;doRoll()},800)}
 }
 
 async function move(c,p){
-  const G=gen;busy=true;ui();
+  const G=gen;busy=true;tries=0;ui();
   const sp=Math.max(120,+getComputedStyle($('b')).getPropertyValue('--t').replace('ms','')||220)+30;
   let bonus=roll==6;
   $('pl').append(p.g);void p.g.getBoundingClientRect();      // bring mover to front
@@ -302,7 +340,7 @@ const PEER_OPTS={config:{iceServers:[
   {urls:'stun:stun.l.google.com:19302'},{urls:'stun:global.stun.twilio.com:3478'},
   {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}
 ]}};
-const ls=(k,v)=>{k='ludo_'+k;try{if(v===undefined)return JSON.parse(localStorage.getItem(k));v===null?localStorage.removeItem(k):localStorage.setItem(k,JSON.stringify(v))}catch(e){}return null};
+const ls=(k,v)=>{const S=(k=='name'||k=='fair'||k=='tries')?localStorage:sessionStorage;k='ludo_'+k;try{if(v===undefined)return JSON.parse(S.getItem(k));v===null?S.removeItem(k):S.setItem(k,JSON.stringify(v))}catch(e){}return null};
 let TOK=ls('tok');if(!TOK)ls('tok',TOK=Math.random().toString(36).slice(2)+Date.now().toString(36));
 let offc=[],bq=0;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
@@ -315,29 +353,30 @@ function bc(){if(net&&net.role=='host'&&!bq){bq=1;queueMicrotask(()=>{bq=0;if(ne
 function calcOff(){offc=act.filter(k=>{const t=net.own[k];return t&&t!==net.me&&!net.on[t]})}
 function snap(){
   calcOff();act.forEach(c=>{const n=net.names[net.own[c]];if(n)nm[c]=n});
-  return{t:'snap',act,type,own:net.own,nm,turn,roll,rolled,busy,sixes,done,over,m:lm,off:offc,s:act.map(c=>pw[c].map(p=>p.s))};
+  return{t:'snap',act,type,own:net.own,nm,turn,roll,rolled,busy,sixes,done,over,m:lm,off:offc,lr:lastRoll,lb:lastBy,s:act.map(c=>pw[c].map(p=>p.s))};
 }
 function sendAll(m){for(const t in net.conns){const c=net.conns[t];if(c&&c.open)c.send(m)}}
 function broadcast(){
   if(net.started){sendAll(snap());persist()}
   else{const m={t:'lobby',code:net.code,p:net.order.map(t=>({n:net.names[t],on:!!net.on[t],me:t==net.me}))};sendAll(m);renderLobby(m);persist()}
 }
-function persist(){ls('host',{code:net.code,order:net.order,names:net.names,own:net.own,st:net.started?{act,type,nm,turn,done,over,s:act.map(c=>pw[c].map(p=>p.s))}:null})}
+function persist(){ls('host',{ts:Date.now(),code:net.code,order:net.order,names:net.names,own:net.own,st:net.started?{act,type,nm,turn,done,over,s:act.map(c=>pw[c].map(p=>p.s))}:null})}
 function renderLobby(m){
   $('rcode').textContent=m.code;$('rc').textContent='Room '+m.code;
   $('plist').innerHTML=m.p.map(p=>`<li style="opacity:${p.on?1:.45}">${esc(p.n)}${p.me?' (you)':''}${p.on?'':' — offline'}</li>`).join('');
   const h=net.role=='host';$('start').style.display=h&&!net.started?'':'none';$('start').disabled=m.p.length<2;
   $('wait').style.display=h||net.started?'none':'';$('rn').style.display=h?'none':'';
 }
-function roomView(){$('lobby').hidden=false;$('vh').hidden=!!net;$('vr').hidden=!net;if(net){$('rc').textContent='Room '+net.code;$('rcode').textContent=net.code;$('start').style.display='none';$('wait').style.display='none';$('rn').style.display=net.role=='guest'?'':'none'}}
-function leave(keep){
-  const was=net;net=null;try{peer&&peer.destroy()}catch(e){}peer=null;
-  ls(was&&was.role=='host'?'host':'guest',null);offc=[];$('rc').textContent='';$('bot').style.display='none';
-  setup(4,true);roomView();if(!keep)status('');
+function roomView(){$('lobby').hidden=false;$('fr').style.display=$('tr').style.display=net&&net.role=='guest'?'none':'flex';$('vh').hidden=!!net;$('vr').hidden=!net;if(net){$('rc').textContent='Room '+net.code;$('rcode').textContent=net.code;$('start').style.display='none';$('wait').style.display='none';$('rn').style.display=net.role=='guest'?'':'none'}}
+function endOnline(){
+  net=null;try{peer&&peer.destroy()}catch(e){}peer=null;
+  ls('host',null);ls('guest',null);offc=[];$('rc').textContent='';$('bot').style.display='none';
 }
+function leave(keep){endOnline();setup(4,true);roomView();if(!keep)status('')}
 /* host */
 function hostStart(code,sv){
   if(noLib())return;
+  endOnline();
   net={role:'host',code,me:TOK,own:{},names:{},order:[TOK],on:{},conns:{},started:false};
   net.names[TOK]=myName();net.on[TOK]=true;
   if(sv){net.order=sv.order;net.names=Object.assign(sv.names,{[TOK]:myName()});net.own=sv.own||{}}
@@ -347,7 +386,7 @@ function hostStart(code,sv){
   const open=k=>{
     try{peer&&peer.destroy()}catch(e){}
     peer=new Peer(ID(code),PEER_OPTS);
-    peer.on('open',()=>{status('Room open — share the code or invite link.');if(sv&&sv.st&&!net.started)restore(sv.st);else broadcast()});
+    peer.on('open',()=>{if(net!==n0)return;status('Room open — share the code or invite link.');if(sv&&sv.st&&!net.started)restore(sv.st);else broadcast()});
     peer.on('connection',c=>{c.on('data',d=>onHost(c,d));c.on('close',()=>drop(c))});
     peer.on('disconnected',()=>{try{peer.reconnect()}catch(e){}});
     peer.on('error',e=>{
@@ -410,8 +449,9 @@ function takeover(){
 function joinRoom(code,re){
   if(noLib())return;
   code=code.trim().toUpperCase();if(code.length!=5){status('Enter the 5-letter room code.');return}
+  endOnline();
   net={role:'guest',code,me:TOK,own:{},conn:null,first:!re,started:false};
-  ls('guest',{code});roomView();gconnect();
+  ls('guest',{code,ts:Date.now()});roomView();gconnect();
 }
 function gconnect(){
   if(!net||net.role!='guest')return;const n=net;
@@ -438,15 +478,16 @@ function onGuest(d){
   if(d.t=='hi'){net.first=false;status('Connected')}
   else if(d.t=='err'){leave(true);status(d.m)}
   else if(d.t=='lobby')renderLobby(d);
-  else if(d.t=='die')rollAnim();
+  else if(d.t=='die')rollAnim(Math.min(6,Math.max(1,Math.floor(+d.v)||1)));
   else if(d.t=='snap')applySnap(d);
 }
 function applySnap(d){
+  if(!Array.isArray(d.act)||!d.act.every(c=>ORDER.includes(c))||!Array.isArray(d.s)||d.s.length!=d.act.length)return;
   const fresh=JSON.stringify(d.act)!=JSON.stringify(act)||!Object.keys(pw).length||!net.started;
   net.started=true;net.own=d.own;
   if(fresh){act=d.act;nm=d.nm;buildPawns();act.forEach((c,ci)=>pw[c].forEach((p,i)=>p.s=d.s[ci][i]));
     $('b').classList.add('nt');layout();void $('b').getBoundingClientRect();$('b').classList.remove('nt');$('lobby').hidden=true}
-  type=d.type;nm=d.nm;turn=d.turn;roll=d.roll;rolled=d.rolled;busy=d.busy;sixes=d.sixes;done=d.done;offc=d.off;
+  type=d.type;nm=d.nm;turn=d.turn;roll=d.roll;rolled=d.rolled;busy=d.busy;sixes=d.sixes;done=d.done;offc=d.off;lastRoll=d.lr;lastBy=d.lb;
   act.forEach((c,ci)=>pw[c].forEach((p,i)=>{const v=d.s[ci][i];
     if(v>p.s){$('pl').append(p.g);void p.g.getBoundingClientRect();hop(p);tone(520,.05)}
     p.s=v}));
@@ -454,11 +495,16 @@ function applySnap(d){
   if(over&&!was)showEnd();else if(!over)$('end').hidden=true;
 }
 
+setInterval(()=>{
+  if(over||!act.length||(net&&net.role=='guest'))return;
+  const c=curr();
+  if(type[c]=='bot'&&!busy&&!rolled&&Date.now()-lastAct>2500)doRoll();
+},1000);
 /* ---------- wiring ---------- */
 $('roll').onclick=userRoll;$('dieb').onclick=userRoll;
 $('again').onclick=()=>{if(net){if(net.role=='host')startOnline()}else setup(...cfg)};
-$('lv').onclick=()=>{setup(+$('np').value,true);$('lobby').hidden=true};
-$('lp').onclick=()=>{setup(+$('np').value,false);$('lobby').hidden=true};
+$('lv').onclick=()=>{endOnline();setup(+$('np').value,true);$('lobby').hidden=true};
+$('lp').onclick=()=>{endOnline();setup(+$('np').value,false);$('lobby').hidden=true};
 $('mk').onclick=()=>hostStart(mkCode());
 $('jn').onclick=()=>joinRoom($('jc').value);
 $('start').onclick=startOnline;
@@ -467,12 +513,14 @@ $('lb').onclick=()=>leave();
 $('bot').onclick=takeover;
 $('menu').onclick=roomView;
 $('lx').onclick=()=>$('lobby').hidden=true;
+fair=ls('fair')!==false;$('fair').checked=fair;$('fair').onchange=()=>{fair=$('fair').checked;ls('fair',fair)};
+triesRule=ls('tries')===true;$('t3').checked=triesRule;$('t3').onchange=()=>{triesRule=$('t3').checked;ls('tries',triesRule)};
 $('nm').value=ls('name')||'';$('nm').onchange=()=>ls('name',$('nm').value.trim());
 $('cp').onclick=async()=>{const u=location.href.split('?')[0].split('#')[0]+'?room='+net.code;
   try{await navigator.clipboard.writeText(u);status('Invite link copied')}catch(e){prompt('Copy this invite link',u)}};
 $('snd').onclick=()=>{snd=!snd;$('snd').textContent=snd?'🔊':'🔇'};
 drawBoard();setup(4,true);
-{const q=new URLSearchParams(location.search).get('room'),h=ls('host'),g=ls('guest');
+{const q=new URLSearchParams(location.search).get('room'),fresh=o=>o&&Date.now()-(o.ts||0)<432e5,h=fresh(ls('host'))?ls('host'):null,g=fresh(ls('guest'))?ls('guest'):null;
  if(h)hostStart(h.code,h);
  else if(g&&(!q||q.toUpperCase()==g.code))joinRoom(g.code,true);
  else if(q){$('jc').value=q.toUpperCase().slice(0,5);status('Enter your name, then tap Join room.')}}
